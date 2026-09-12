@@ -1,6 +1,6 @@
 import React from "react";
 import { Check, Clock, RefreshCw, CheckCircle2, AlertCircle, ShieldCheck } from "lucide-react";
-import { formatDate } from "../utils/formatters";
+import { formatDate, formatTimelineDate } from "../utils/formatters";
 import { cn } from "../utils/cn";
 
 export function ComplaintTimeline({ timeline = [], currentStatus = "SUBMITTED", className }) {
@@ -97,7 +97,7 @@ export function ComplaintTimeline({ timeline = [], currentStatus = "SUBMITTED", 
                   {(stageEvent?.timestamp || (isCurrent && timeline[timeline.length - 1]?.timestamp)) && (
                     <div className="flex items-center gap-1 text-2xs text-slate-500 font-medium">
                       <Clock className="w-3 h-3" />
-                      <span>{formatDate(stageEvent?.timestamp || timeline[timeline.length - 1]?.timestamp)}</span>
+                      <span>{formatTimelineDate(stageEvent?.timestamp || timeline[timeline.length - 1]?.timestamp)}</span>
                     </div>
                   )}
                 </div>

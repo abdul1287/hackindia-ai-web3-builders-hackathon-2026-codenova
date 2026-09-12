@@ -25,11 +25,13 @@ import { LoadingState } from "../../components/LoadingState";
 import { ErrorState } from "../../components/ErrorState";
 import { showToast } from "../../components/Toast";
 import { formatDate } from "../../utils/formatters";
+import { useAuthorityAuth, matchesDepartment } from "../../context/AuthorityAuthContext";
 import * as api from "../../services/api";
 
 export function AuthorityDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { departmentName } = useAuthorityAuth();
 
   const [complaint, setComplaint] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -120,6 +122,20 @@ export function AuthorityDetailPage() {
           title="Case Dossier Not Found"
           message={error || `Could not find complaint "${id}".`}
           onRetry={() => navigate("/authority")}
+        />
+      </div>
+    );
+  }
+
+  // Department Authorization Check
+  if (!matchesDepartment(complaint, departmentName)) {
+    return (
+      <div className="max-w-2xl mx-auto pt-8">
+        <ErrorState
+          title="Department Access Restricted"
+          message={`Ticket ${complaint.id} is assigned to ${complaint.authority}. You are currently authenticated under ${departmentName}.`}
+          actionLabel="Back to Authorized Dashboard"
+          onAction={() => navigate("/authority")}
         />
       </div>
     );

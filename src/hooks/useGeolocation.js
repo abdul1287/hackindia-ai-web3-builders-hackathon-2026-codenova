@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { reverseGeocode as apiReverseGeocode } from "../services/api";
 
 export function useGeolocation(initialLocation = null) {
   const [location, setLocation] = useState(initialLocation || {
@@ -10,17 +11,17 @@ export function useGeolocation(initialLocation = null) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Simulated reverse geocoding fallback for hackathon demonstration
+  // Dynamic reverse geocoding via CivicAI backend Nominatim service
   const reverseGeocode = useCallback(async (lat, lng) => {
-    // In real scenario, would call Nominatim / Google Maps / Pelias API
-    // For fast reliable offline/hackathon experience:
-    if (Math.abs(lat - 28.6280) < 0.05 && Math.abs(lng - 77.3649) < 0.05) {
-      return "Sector 62, Industrial Area, Noida, UP";
+    try {
+      const res = await apiReverseGeocode(lat, lng);
+      if (res.success && res.data) {
+        return res.data.formatted_address || res.data.display_name || "Location detected";
+      }
+    } catch {
+      // Fallback
     }
-    if (Math.abs(lat - 28.5991) < 0.05 && Math.abs(lng - 77.3610) < 0.05) {
-      return "Sector 61, Commercial Hub, Noida, UP";
-    }
-    return `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)} (Auto-detected Street Location)`;
+    return "Location detected";
   }, []);
 
   const detectLocation = useCallback(() => {

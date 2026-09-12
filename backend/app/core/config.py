@@ -26,7 +26,7 @@ class Settings(BaseSettings):
 
     # LLM Settings
     LLM_API_KEY: str = ""
-    LLM_MODEL: str = "gemini-3.6-flash"
+    LLM_MODEL: str = "gemini-3.5-flash"
     LLM_API_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta"
 
     # Cloudinary Settings

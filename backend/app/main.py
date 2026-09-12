@@ -9,7 +9,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.config import settings
 from app.core.database import engine, Base
-from app.routers import analyze_router, complaints_router, authorities_router
+from app.routers import analyze_router, complaints_router, authorities_router, location_router
 import app.models  # ensure models are loaded
 
 # Ensure local uploads directory exists
@@ -48,6 +48,7 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 app.include_router(analyze_router, prefix=settings.API_V1_STR)
 app.include_router(complaints_router, prefix=settings.API_V1_STR)
 app.include_router(authorities_router, prefix=settings.API_V1_STR)
+app.include_router(location_router, prefix=settings.API_V1_STR)
 
 @app.get("/api/health", tags=["Health"], summary="API Health Check")
 def health_check():

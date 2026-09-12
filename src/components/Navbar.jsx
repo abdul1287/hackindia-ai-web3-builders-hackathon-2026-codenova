@@ -93,13 +93,7 @@ export function Navbar() {
 
           {/* Right Actions */}
           <div className="hidden sm:flex items-center gap-2.5">
-            {isAuthority ? (
-              <Link to="/">
-                <Button variant="outline" size="sm">
-                  Exit to Citizen View
-                </Button>
-              </Link>
-            ) : (
+            {!isAuthority && (
               <>
                 <Link to="/authority">
                   <Button

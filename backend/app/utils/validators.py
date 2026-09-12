@@ -7,6 +7,12 @@ ALLOWED_IMAGE_MIME_TYPES = {
     "image/webp": ".webp",
     "image/jfif": ".jpg",
     "image/x-png": ".png",
+    "image/pjpeg": ".jpg",
+    "image/gif": ".gif",
+    "image/bmp": ".bmp",
+    "image/heic": ".heic",
+    "image/heif": ".heif",
+    "image/avif": ".avif",
 }
 
 EXTENSION_TO_MIME = {
@@ -15,6 +21,10 @@ EXTENSION_TO_MIME = {
     ".png": "image/png",
     ".webp": "image/webp",
     ".jfif": "image/jpeg",
+    ".gif": "image/gif",
+    ".bmp": "image/bmp",
+    ".heic": "image/heic",
+    ".avif": "image/avif",
 }
 
 def validate_coordinates(latitude: float = None, longitude: float = None) -> None:
@@ -32,23 +42,26 @@ def validate_coordinates(latitude: float = None, longitude: float = None) -> Non
 
 def validate_image_file(file: UploadFile, max_size_mb: int = 10) -> None:
     """Validates uploaded file exists, has a supported image MIME type, and does not exceed size limit."""
-    if not file or not file.filename:
+    if not file:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="An image file is required for civic issue analysis."
         )
 
+    if not file.filename:
+        file.filename = "evidence.jpg"
+
     # Validate content type
     raw_ct = (file.content_type or "").split(";")[0].strip().lower()
     
-    # Fallback to extension check if content_type is generic or missing
-    if raw_ct not in ALLOWED_IMAGE_MIME_TYPES:
-        import os
-        ext = os.path.splitext(file.filename)[1].lower()
-        if ext in EXTENSION_TO_MIME:
-            file.content_type = EXTENSION_TO_MIME[ext]
-            return
-        raise HTTPException(
-            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail=f"Unsupported image type: '{file.content_type}'. Allowed types: JPEG, PNG, WEBP."
-        )
+    if raw_ct in ALLOWED_IMAGE_MIME_TYPES or raw_ct.startswith("image/"):
+        return
+    
+    import os
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext in EXTENSION_TO_MIME:
+        file.content_type = EXTENSION_TO_MIME[ext]
+        return
+
+    # Default fallback for blob or raw stream
+    file.content_type = "image/jpeg"

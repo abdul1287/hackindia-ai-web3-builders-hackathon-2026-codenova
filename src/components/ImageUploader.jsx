@@ -1,6 +1,7 @@
 import React, { useState, useRef } from "react";
 import { Camera, Upload, X, RefreshCw, CheckCircle2, Sparkles, Image as ImageIcon } from "lucide-react";
 import { Button } from "./Button";
+import { CameraModal } from "./CameraModal";
 import { cn } from "../utils/cn";
 import { SAMPLE_CIVIC_ISSUES } from "../utils/aiAnalyzer";
 
@@ -14,6 +15,7 @@ export function ImageUploader({
 }) {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadError, setUploadError] = useState(null);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
 
@@ -111,16 +113,28 @@ export function ImageUploader({
             <p className="text-xs text-slate-200 font-medium truncate max-w-[200px]">
               Ready for AI Inspection
             </p>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => fileInputRef.current?.click()}
-              className="bg-white/90 hover:bg-white text-slate-900 border-none backdrop-blur-md shadow-xs"
-              leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
-            >
-              Replace Photo
-            </Button>
+            <div className="flex items-center gap-1.5">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setIsCameraOpen(true)}
+                className="bg-white/90 hover:bg-white text-slate-900 border-none backdrop-blur-md shadow-xs"
+                leftIcon={<Camera className="w-3.5 h-3.5" />}
+              >
+                Retake
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+                className="bg-white/90 hover:bg-white text-slate-900 border-none backdrop-blur-md shadow-xs"
+                leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
+              >
+                Replace
+              </Button>
+            </div>
           </div>
         </div>
       ) : (
@@ -153,7 +167,7 @@ export function ImageUploader({
               variant="primary"
               size="sm"
               leftIcon={<Camera className="w-4 h-4" />}
-              onClick={() => cameraInputRef.current?.click()}
+              onClick={() => setIsCameraOpen(true)}
             >
               Take Photo
             </Button>
@@ -173,6 +187,13 @@ export function ImageUploader({
           </p>
         </div>
       )}
+
+      {/* Live Webcam Capture Viewfinder Modal */}
+      <CameraModal
+        isOpen={isCameraOpen}
+        onClose={() => setIsCameraOpen(false)}
+        onCapture={onImageSelected}
+      />
 
       {uploadError && (
         <p className="text-xs text-rose-600 font-medium px-1">

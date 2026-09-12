@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Optional, List, Tuple
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, desc, func
@@ -22,6 +23,7 @@ def create_complaint(db: Session, complaint_data: ComplaintCreate) -> Complaint:
 
     # Generate unique formatted complaint ID (CIV-2026-XXXXX)
     complaint_id_str = generate_complaint_id(db)
+    now = datetime.now(timezone.utc)
 
     complaint = Complaint(
         complaint_id=complaint_id_str,
@@ -38,6 +40,8 @@ def create_complaint(db: Session, complaint_data: ComplaintCreate) -> Complaint:
         location_text=complaint_data.location_text,
         authority_id=complaint_data.authority_id,
         status=StatusEnum.SUBMITTED.value,
+        created_at=now,
+        updated_at=now,
     )
 
     db.add(complaint)
@@ -47,7 +51,8 @@ def create_complaint(db: Session, complaint_data: ComplaintCreate) -> Complaint:
     initial_history = StatusHistory(
         complaint_id=complaint.id,
         status=StatusEnum.SUBMITTED.value,
-        note="Complaint logged by citizen and routed to responsible municipal department."
+        note="Complaint logged by citizen and routed to responsible municipal department.",
+        changed_at=now
     )
     db.add(initial_history)
     db.commit()
@@ -144,7 +149,9 @@ def update_complaint_status(
         )
 
     # Update complaint
+    now = datetime.now(timezone.utc)
     complaint.status = norm_status
+    complaint.updated_at = now
 
     # Record history entry
     default_notes = {
@@ -157,7 +164,8 @@ def update_complaint_status(
     history_entry = StatusHistory(
         complaint_id=complaint.id,
         status=norm_status,
-        note=note or default_notes.get(norm_status, f"Status changed to {norm_status}.")
+        note=note or default_notes.get(norm_status, f"Status changed to {norm_status}."),
+        changed_at=now
     )
     db.add(history_entry)
     db.commit()

@@ -32,12 +32,84 @@ function saveComplaints(complaints) {
 // Simulated network delay helper
 const delay = (ms = 400) => new Promise((resolve) => setTimeout(resolve, ms));
 
+export async function reverseGeocode(latitude, longitude) {
+  if (latitude == null || longitude == null || isNaN(Number(latitude)) || isNaN(Number(longitude))) {
+    return { success: false, error: "Latitude and longitude required" };
+  }
+
+  const latNum = Number(latitude);
+  const lngNum = Number(longitude);
+
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?lat=${encodeURIComponent(latNum)}&lon=${encodeURIComponent(lngNum)}&format=jsonv2&addressdetails=1`;
+    const resp = await fetch(url, {
+      headers: { "Accept-Language": "en" }
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      const addr = data.address || {};
+      const components = [];
+
+      const road = addr.road;
+      if (road && !road.toLowerCase().includes("unnamed") && !road.toLowerCase().includes("path to")) {
+        components.push(road.trim());
+      }
+
+      const locality = addr.suburb || addr.neighbourhood || addr.residential || addr.quarter || addr.village;
+      if (locality && !components.includes(locality.trim())) {
+        components.push(locality.trim());
+      }
+
+      const city = addr.city || addr.town || addr.municipality || addr.county;
+      if (city && !components.includes(city.trim())) {
+        components.push(city.trim());
+      }
+
+      const state = addr.state;
+      if (state && !components.includes(state.trim())) {
+        components.push(state.trim());
+      }
+
+      const country = addr.country;
+      if (country && !components.includes(country.trim())) {
+        components.push(country.trim());
+      }
+
+      const formatted = components.length > 0 ? components.join(", ") : (data.display_name || "Location detected");
+      return {
+        success: true,
+        data: {
+          latitude: latNum,
+          longitude: lngNum,
+          city: city || null,
+          display_name: formatted,
+          formatted_address: formatted,
+        }
+      };
+    }
+  } catch (err) {
+    console.warn("mockApi reverseGeocode network fallback:", err);
+  }
+
+  // Graceful fallback without hardcoded names
+  return {
+    success: true,
+    data: {
+      latitude: latNum,
+      longitude: lngNum,
+      city: null,
+      display_name: "Location detected",
+      formatted_address: "Location detected",
+    }
+  };
+}
+
 /**
  * Mock: Analyze an issue using AI vision
  */
 export async function analyzeIssue(data) {
   await delay(1200); // realistic AI vision processing time
-  const aiResult = analyzeVisualIssue(data);
+  const aiResult = await analyzeVisualIssue(data);
   return {
     success: true,
     data: aiResult

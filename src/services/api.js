@@ -144,17 +144,27 @@ export async function createComplaint(complaintData) {
 
   try {
     const payload = {
-      issue_type: (complaintData.issueType || complaintData.issue_type || "pothole").toLowerCase(),
-      category: (complaintData.category || "road_infrastructure").toLowerCase(),
+      issue_type: (complaintData.issueType || complaintData.issue_type || "Civic Hazard").toLowerCase(),
+      category: (complaintData.category || "general_infrastructure").toLowerCase(),
       severity: (complaintData.severity || "medium").toLowerCase(),
       safety_risk: Boolean(complaintData.safetyRisk ?? complaintData.safety_risk),
       complaint_title: complaintData.title || complaintData.complaint_title || "Civic Hazard Report",
       complaint_description: complaintData.description || complaintData.complaint_description || "Issue observed on municipal property.",
-      image_url: complaintData.image || complaintData.image_url || "https://images.unsplash.com/photo-1515162816999-a0c47dc192f7",
+      image_url: complaintData.image || complaintData.image_url || "",
       latitude: complaintData.location?.lat ?? complaintData.latitude ?? 28.6280,
       longitude: complaintData.location?.lng ?? complaintData.longitude ?? 77.3649,
       location_text: complaintData.location?.address || complaintData.location_text || "Sector 62, Noida",
-      authority_id: complaintData.authority_id || (typeof complaintData.authority === "object" ? complaintData.authority?.id : 1),
+      authority_id:
+        complaintData.authority_id ||
+        (typeof complaintData.authority === "object" ? complaintData.authority?.id : null) ||
+        ({
+          sanitation: 2,
+          electrical: 3,
+          water_supply: 4,
+          urban_safety: 5,
+          stormwater_drainage: 6,
+          road_infrastructure: 1,
+        }[(complaintData.category || "").toLowerCase().replace(/[_\s-]+/g, "_")] || 1),
       ai_description: complaintData.ai_description || complaintData.description,
     };
 
@@ -266,4 +276,31 @@ export async function updateComplaintStatus(id, status, note = "") {
   }
 }
 
+/**
+ * 6. GET /api/location/reverse?latitude={lat}&longitude={lng}
+ * Reverse geocodes coordinates to human-readable address
+ */
+export async function reverseGeocode(latitude, longitude) {
+  if (latitude == null || longitude == null || isNaN(Number(latitude)) || isNaN(Number(longitude))) {
+    return { success: false, error: "Latitude and longitude required" };
+  }
+
+  if (IS_DEMO_MODE) {
+    return mockApi.reverseGeocode(latitude, longitude);
+  }
+
+  try {
+    const res = await fetch(
+      `${API_BASE_URL}/location/reverse?latitude=${encodeURIComponent(latitude)}&longitude=${encodeURIComponent(longitude)}`
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    const json = await res.json();
+    return { success: true, data: json };
+  } catch (err) {
+    console.warn("Live reverseGeocode failed, trying mockApi fallback:", err);
+    return mockApi.reverseGeocode(latitude, longitude);
+  }
+}
+
 export { resetMockDatabase } from "./mockApi";
+

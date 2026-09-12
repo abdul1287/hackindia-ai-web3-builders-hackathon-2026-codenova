@@ -24,39 +24,120 @@ import { LoadingState } from "../../components/LoadingState";
 import { EmptyState } from "../../components/EmptyState";
 import { useComplaints } from "../../hooks/useComplaints";
 import { formatDate, formatRelativeTime } from "../../utils/formatters";
+import { useAuthorityAuth, matchesDepartment } from "../../context/AuthorityAuthContext";
 
 export function AuthorityDashboardPage() {
-  const { complaints, loading, stats, refreshComplaints } = useComplaints();
+  const { departmentName } = useAuthorityAuth();
+  const { complaints, loading, refreshComplaints } = useComplaints();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [severityFilter, setSeverityFilter] = useState("ALL");
   const [categoryFilter, setCategoryFilter] = useState("ALL");
 
-  // Get distinct categories
+  // Filter complaints strictly to the authorized department
+  const departmentComplaints = useMemo(() => {
+    return complaints.filter((c) => matchesDepartment(c, departmentName));
+  }, [complaints, departmentName]);
+
+  // Department-specific dashboard statistics
+  const stats = useMemo(() => {
+    const total = departmentComplaints.length;
+    const submitted = departmentComplaints.filter((c) => {
+      const s = (c.status || "").toUpperCase().replace(/\s+/g, "_");
+      return s === "SUBMITTED";
+    }).length;
+    const inProgress = departmentComplaints.filter((c) => {
+      const s = (c.status || "").toUpperCase().replace(/\s+/g, "_");
+      return s === "IN_PROGRESS";
+    }).length;
+    const resolved = departmentComplaints.filter((c) => {
+      const s = (c.status || "").toUpperCase().replace(/\s+/g, "_");
+      return s === "RESOLVED";
+    }).length;
+    const active = submitted + inProgress;
+    const highSeverity = departmentComplaints.filter((c) => {
+      const sev = (c.severity || "").toLowerCase().trim();
+      return sev === "high" || sev === "critical";
+    }).length;
+
+    return { total, submitted, inProgress, resolved, active, highSeverity };
+  }, [departmentComplaints]);
+
+  // Format category label for dropdown
+  const formatCategoryLabel = (cat) => {
+    if (!cat || cat === "ALL") return "Category: All";
+    return cat
+      .replace(/[_-]/g, " ")
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  };
+
+  // Get distinct categories belonging to this department
   const categories = useMemo(() => {
-    const set = new Set(complaints.map((c) => c.category).filter(Boolean));
-    return ["ALL", ...Array.from(set)];
-  }, [complaints]);
-
-  // Filter complaints
-  const filtered = useMemo(() => {
-    return complaints.filter((c) => {
-      if (statusFilter !== "ALL" && c.status !== statusFilter) return false;
-      if (severityFilter !== "ALL" && c.severity !== severityFilter) return false;
-      if (categoryFilter !== "ALL" && c.category !== categoryFilter) return false;
-
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchesId = c.id.toLowerCase().includes(q);
-        const matchesTitle = c.title?.toLowerCase().includes(q);
-        const matchesIssue = c.issueType?.toLowerCase().includes(q);
-        const matchesLoc = c.location?.address?.toLowerCase().includes(q);
-        return matchesId || matchesTitle || matchesIssue || matchesLoc;
+    const map = new Map();
+    departmentComplaints.forEach((c) => {
+      if (c.category) {
+        const key = c.category.toLowerCase().replace(/[-_\s]+/g, "");
+        if (!map.has(key)) {
+          map.set(key, c.category);
+        }
       }
+    });
+    return ["ALL", ...Array.from(map.values())];
+  }, [departmentComplaints]);
+
+  // Filter department complaints by search, status, severity, category
+  const filtered = useMemo(() => {
+    return departmentComplaints.filter((c) => {
+      // 1. Status Filter
+      if (statusFilter !== "ALL") {
+        const cStatus = (c.status || "").toUpperCase().replace(/\s+/g, "_");
+        const targetStatus = statusFilter.toUpperCase().replace(/\s+/g, "_");
+        if (cStatus !== targetStatus) return false;
+      }
+
+      // 2. Severity Filter
+      if (severityFilter !== "ALL") {
+        const cSev = (c.severity || "").toLowerCase().trim();
+        const targetSev = severityFilter.toLowerCase().trim();
+        if (targetSev === "high") {
+          if (cSev !== "high" && cSev !== "critical") return false;
+        } else {
+          if (cSev !== targetSev) return false;
+        }
+      }
+
+      // 3. Category Filter
+      if (categoryFilter !== "ALL") {
+        const cCat = (c.category || "").toLowerCase().replace(/[-_\s]+/g, "");
+        const targetCat = categoryFilter.toLowerCase().replace(/[-_\s]+/g, "");
+        if (cCat !== targetCat) return false;
+      }
+
+      // 4. Search Filter
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const idStr = String(c.id || c.complaint_id || "").toLowerCase();
+        const titleStr = String(c.title || c.complaint_title || "").toLowerCase();
+        const issueStr = String(c.issueType || c.issue_type || "").toLowerCase();
+        const locStr = String(c.location?.address || c.location_text || "").toLowerCase();
+        const catStr = String(c.category || "").toLowerCase();
+        const descStr = String(c.description || c.complaint_description || "").toLowerCase();
+
+        const matches =
+          idStr.includes(q) ||
+          titleStr.includes(q) ||
+          issueStr.includes(q) ||
+          locStr.includes(q) ||
+          catStr.includes(q) ||
+          descStr.includes(q);
+
+        if (!matches) return false;
+      }
+
       return true;
     });
-  }, [complaints, statusFilter, severityFilter, categoryFilter, searchQuery]);
+  }, [departmentComplaints, statusFilter, severityFilter, categoryFilter, searchQuery]);
 
   return (
     <div className="space-y-6">
@@ -66,7 +147,7 @@ export function AuthorityDashboardPage() {
         badge={
           <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-900 border border-amber-200">
             <Building2 className="w-3.5 h-3.5 text-amber-700" />
-            Public Works Department &bull; Operations Desk
+            {departmentName || "Public Works Department"} &bull; Operations Desk
           </span>
         }
         description="Review AI-classified incidents, prioritize emergency hazards, deploy response crews, and update ticket resolution stages."
@@ -199,7 +280,7 @@ export function AuthorityDashboardPage() {
             >
               {categories.map((cat) => (
                 <option key={cat} value={cat}>
-                  {cat === "ALL" ? "Category: All" : cat}
+                  {formatCategoryLabel(cat)}
                 </option>
               ))}
             </select>
@@ -238,6 +319,11 @@ export function AuthorityDashboardPage() {
       {/* Main Table View (Desktop) & Cards (Mobile) */}
       {loading ? (
         <LoadingState variant="skeleton" />
+      ) : departmentComplaints.length === 0 ? (
+        <EmptyState
+          title={`No complaints in ${departmentName || "Department"} queue`}
+          description="Your department queue is clear. Grievances routed by CivicAI to this department will automatically appear here."
+        />
       ) : filtered.length === 0 ? (
         <EmptyState
           title="No complaints match filters"
@@ -269,14 +355,14 @@ export function AuthorityDashboardPage() {
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
                 {filtered.map((item) => {
-                  const isHighRisk = item.severity === "High" || item.severity === "Critical";
+                  const normItemSev = (item.severity || "").toLowerCase().trim();
+                  const isHighRisk = normItemSev === "high" || normItemSev === "critical";
 
                   return (
                     <tr
                       key={item.id}
-                      className={`hover:bg-slate-50/80 transition-colors group ${
-                        isHighRisk ? "bg-amber-50/20" : ""
-                      }`}
+                      className={`hover:bg-slate-50/80 transition-colors group ${isHighRisk ? "bg-amber-50/20" : ""
+                        }`}
                     >
                       {/* ID */}
                       <td className="py-3.5 px-4 font-mono font-semibold text-blue-700 whitespace-nowrap">
