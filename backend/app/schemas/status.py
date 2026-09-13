@@ -12,6 +12,7 @@ class StatusEnum(str, Enum):
 class StatusUpdate(BaseModel):
     status: StatusEnum
     note: Optional[str] = None
+    resolution_image: Optional[str] = None
 
 class StatusHistoryResponse(BaseModel):
     id: int

@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from sqlalchemy import text
 from app.core.config import settings
 from app.core.database import engine, Base
 from app.routers import analyze_router, complaints_router, authorities_router, location_router
@@ -20,6 +21,13 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 async def lifespan(app: FastAPI):
     # Auto-create tables for local development/sqlite ease
     Base.metadata.create_all(bind=engine)
+    # Ensure resolution_image_url column exists in complaints table
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE complaints ADD COLUMN resolution_image_url VARCHAR(500)"))
+            conn.commit()
+    except Exception:
+        pass  # Column already exists
     yield
 
 app = FastAPI(

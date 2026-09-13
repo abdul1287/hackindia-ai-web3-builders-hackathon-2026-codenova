@@ -129,7 +129,8 @@ def update_complaint_status(
     db: Session,
     identifier: str,
     new_status: str,
-    note: Optional[str] = None
+    note: Optional[str] = None,
+    resolution_image: Optional[str] = None
 ) -> Complaint:
     """Updates complaint status and appends an auditable record to status_history."""
     complaint = get_complaint_by_id(db, identifier)
@@ -152,6 +153,8 @@ def update_complaint_status(
     now = datetime.now(timezone.utc)
     complaint.status = norm_status
     complaint.updated_at = now
+    if resolution_image:
+        complaint.resolution_image_url = resolution_image
 
     # Record history entry
     default_notes = {

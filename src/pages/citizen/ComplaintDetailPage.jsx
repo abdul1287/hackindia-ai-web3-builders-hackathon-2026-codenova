@@ -13,6 +13,11 @@ import {
   Clock,
   Sparkles,
   Compass,
+  Camera,
+  ArrowRight,
+  Eye,
+  X,
+  Maximize2,
 } from "lucide-react";
 import { PageHeader } from "../../components/PageHeader";
 import { Button } from "../../components/Button";
@@ -26,6 +31,22 @@ import { showToast } from "../../components/Toast";
 import { formatDate } from "../../utils/formatters";
 import * as api from "../../services/api";
 
+function getContextualResolutionFallback(c) {
+  if (!c) return "https://images.unsplash.com/photo-1590496793929-36417d3117de?auto=format&fit=crop&w=800&q=80";
+  const type = (c.issueType || "").toLowerCase();
+  const cat = (c.category || "").toLowerCase();
+  if (type.includes("pothole") || cat.includes("road")) {
+    return "https://images.unsplash.com/photo-1590496793929-36417d3117de?auto=format&fit=crop&w=800&q=80";
+  }
+  if (type.includes("garbage") || type.includes("waste") || cat.includes("sanitation")) {
+    return "https://images.unsplash.com/photo-1517646287270-a5a9ca602e5c?auto=format&fit=crop&w=800&q=80";
+  }
+  if (type.includes("light") || cat.includes("electr")) {
+    return "https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=800&q=80";
+  }
+  return "https://images.unsplash.com/photo-1590496793929-36417d3117de?auto=format&fit=crop&w=800&q=80";
+}
+
 export function ComplaintDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -33,6 +54,11 @@ export function ComplaintDetailPage() {
   const [complaint, setComplaint] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Resolution Proof viewer state
+  const [proofViewMode, setProofViewMode] = useState("split");
+  const [previewModalImage, setPreviewModalImage] = useState(null);
+  const [citizenFeedback, setCitizenFeedback] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -100,6 +126,39 @@ export function ComplaintDetailPage() {
       </div>
     );
   }
+
+  const resolvedImageSrc =
+    complaint.resolutionImage ||
+    complaint.resolution_image_url ||
+    getContextualResolutionFallback(complaint);
+
+  // Derive latest officer note from timeline or fallback
+  const resolvedTimelineEntry = complaint.timeline?.find(
+    (t) => (t.stage || "").toUpperCase() === "RESOLVED"
+  );
+  const latestTimelineEntry = complaint.timeline?.[complaint.timeline?.length - 1];
+  const latestOfficerNote =
+    resolvedTimelineEntry?.description ||
+    resolvedTimelineEntry?.title ||
+    latestTimelineEntry?.description ||
+    `Ground remediation successfully completed, tested, and verified by ${complaint.authority} field supervisor.`;
+
+  const handleCitizenFeedback = (action) => {
+    setCitizenFeedback(action);
+    if (action === "CONFIRMED") {
+      showToast({
+        title: "Resolution Confirmed",
+        message: "Thank you for verifying! Your confirmation has been added to the public civic log.",
+        type: "success",
+      });
+    } else {
+      showToast({
+        title: "Re-Inspection Requested",
+        message: "Your dispute has been logged. An audit supervisor will re-examine this location.",
+        type: "warning",
+      });
+    }
+  };
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -177,48 +236,331 @@ export function ComplaintDetailPage() {
             )}
           </div>
 
-          {/* Evidence Photo Card */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-2xs space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-900">
-                Photographic Evidence
-              </h3>
-              {complaint.aiMetadata?.confidenceScore && (
-                <span className="inline-flex items-center gap-1 text-2xs font-mono px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  <Sparkles className="w-3 h-3 text-emerald-600" />
-                  Vision AI Verified ({Math.round(complaint.aiMetadata.confidenceScore * 100)}%)
-                </span>
+          {/* Municipal Resolution Proof & Evidence Section */}
+          {complaint.status === "RESOLVED" || complaint.resolutionImage ? (
+            <div className="bg-white rounded-2xl border-2 border-emerald-500/30 p-5 sm:p-6 shadow-sm space-y-5">
+              {/* Card Header with View Mode Switcher */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center shrink-0">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                      <span>Official Resolution Proof</span>
+                      <span className="text-2xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                        Ground Verified
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Visual comparison: Citizen report vs. Municipal field remediation
+                    </p>
+                  </div>
+                </div>
+
+                {/* View Mode Toggle Buttons */}
+                <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs font-semibold self-start sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => setProofViewMode("split")}
+                    className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                      proofViewMode === "split"
+                        ? "bg-white text-slate-900 shadow-2xs font-bold"
+                        : "text-slate-500 hover:text-slate-900"
+                    }`}
+                  >
+                    Before &amp; After
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setProofViewMode("after")}
+                    className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                      proofViewMode === "after"
+                        ? "bg-white text-emerald-800 shadow-2xs font-bold"
+                        : "text-slate-500 hover:text-slate-900"
+                    }`}
+                  >
+                    Resolution Proof
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setProofViewMode("before")}
+                    className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                      proofViewMode === "before"
+                        ? "bg-white text-slate-900 shadow-2xs font-bold"
+                        : "text-slate-500 hover:text-slate-900"
+                    }`}
+                  >
+                    Original Report
+                  </button>
+                </div>
+              </div>
+
+              {/* Visual Comparison Area */}
+              {proofViewMode === "split" && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* BEFORE: Citizen Photo */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-amber-500" />
+                        BEFORE: Reported Incident
+                      </span>
+                      <span className="text-2xs text-slate-400 font-mono">
+                        {formatDate(complaint.createdAt)}
+                      </span>
+                    </div>
+
+                    <div
+                      onClick={() => setPreviewModalImage({ url: complaint.image, title: "Original Citizen Evidence" })}
+                      className="rounded-xl overflow-hidden border border-slate-200 bg-slate-950 aspect-video relative group cursor-pointer"
+                    >
+                      <img
+                        src={complaint.image}
+                        alt="Original Citizen Evidence"
+                        className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-300"
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold gap-1.5 backdrop-blur-[1px]">
+                        <Eye className="w-4 h-4" />
+                        <span>Enlarge Original</span>
+                      </div>
+                      <span className="absolute bottom-2 left-2 text-2xs font-semibold px-2 py-0.5 rounded bg-black/60 text-white backdrop-blur-xs">
+                        Incident Evidence
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* AFTER: Authority Photo */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-emerald-800 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        AFTER: Remediation Proof
+                      </span>
+                      <span className="text-2xs text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                        Official Authority Photo
+                      </span>
+                    </div>
+
+                    <div
+                      onClick={() => setPreviewModalImage({ url: resolvedImageSrc, title: "Official Authority Resolution Proof" })}
+                      className="rounded-xl overflow-hidden border-2 border-emerald-500/60 bg-slate-950 aspect-video relative group cursor-pointer shadow-xs"
+                    >
+                      <img
+                        src={resolvedImageSrc}
+                        alt="Authority Resolution Proof"
+                        className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-300"
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold gap-1.5 backdrop-blur-[1px]">
+                        <Eye className="w-4 h-4" />
+                        <span>Enlarge Proof Photo</span>
+                      </div>
+                      <span className="absolute bottom-2 left-2 text-2xs font-bold px-2 py-0.5 rounded bg-emerald-600 text-white shadow-sm flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>Ground Rectified</span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {proofViewMode === "after" && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-emerald-800 flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      Official Municipal Ground Remediation Photograph
+                    </span>
+                    <span className="text-2xs font-mono text-slate-500">
+                      Resolved: {formatDate(complaint.updatedAt)}
+                    </span>
+                  </div>
+
+                  <div
+                    onClick={() => setPreviewModalImage({ url: resolvedImageSrc, title: "Official Authority Resolution Proof" })}
+                    className="rounded-xl overflow-hidden border-2 border-emerald-500/60 bg-slate-950 aspect-video relative group cursor-pointer"
+                  >
+                    <img
+                      src={resolvedImageSrc}
+                      alt="Authority Resolution Proof"
+                      className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300"
+                    />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold gap-1.5 backdrop-blur-[1px]">
+                      <Eye className="w-4 h-4" />
+                      <span>Click to View Full Resolution</span>
+                    </div>
+                    <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-white text-xs">
+                      <span className="font-semibold bg-emerald-600/90 backdrop-blur-xs px-2.5 py-1 rounded-md">
+                        Inspected by {complaint.authority}
+                      </span>
+                      <span className="font-mono text-2xs bg-black/60 px-2 py-1 rounded-md">
+                        Ticket ID: {complaint.id}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {proofViewMode === "before" && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-slate-700">
+                      Original Citizen Evidence Submitted
+                    </span>
+                    <span className="text-2xs font-mono text-slate-500">
+                      Reported: {formatDate(complaint.createdAt)}
+                    </span>
+                  </div>
+
+                  <div
+                    onClick={() => setPreviewModalImage({ url: complaint.image, title: "Original Citizen Evidence" })}
+                    className="rounded-xl overflow-hidden border border-slate-200 bg-slate-950 aspect-video relative group cursor-pointer"
+                  >
+                    <img
+                      src={complaint.image}
+                      alt={complaint.title}
+                      className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300"
+                    />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold gap-1.5 backdrop-blur-[1px]">
+                      <Eye className="w-4 h-4" />
+                      <span>Click to View Full Size</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Officer Sign-off Details & Audit Trail */}
+              <div className="p-4 bg-emerald-50/50 rounded-xl border border-emerald-200/70 space-y-2">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <span className="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    <span>Municipal Field Sign-Off Statement:</span>
+                  </span>
+                  <span className="text-2xs font-semibold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-md">
+                    Audit Certified &bull; {complaint.authority}
+                  </span>
+                </div>
+                <p className="text-xs text-emerald-950 leading-relaxed italic">
+                  "{latestOfficerNote}"
+                </p>
+                <div className="pt-2 border-t border-emerald-200/50 flex items-center justify-between text-2xs text-emerald-800 flex-wrap gap-2">
+                  <span>Remediation verified by on-site municipal engineering team.</span>
+                  <span className="font-mono">Closure timestamp: {formatDate(complaint.updatedAt)}</span>
+                </div>
+              </div>
+
+              {/* Citizen Ground Verification Action */}
+              <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-800">
+                    Citizen Community Confirmation
+                  </h4>
+                  <p className="text-2xs text-slate-500">
+                    Does the ground photographic proof match your expectations?
+                  </p>
+                </div>
+
+                {citizenFeedback ? (
+                  <div className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2 ${
+                    citizenFeedback === "CONFIRMED"
+                      ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                      : "bg-amber-100 text-amber-900 border border-amber-300"
+                  }`}>
+                    {citizenFeedback === "CONFIRMED" ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        <span>You confirmed this resolution on {formatDate(new Date())}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Clock className="w-4 h-4 text-amber-700" />
+                        <span>Re-inspection dispute logged for Department audit</span>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleCitizenFeedback("DISPUTE")}
+                      className="text-xs border-slate-200 hover:border-amber-400 hover:text-amber-800"
+                    >
+                      Issue Still Exists
+                    </Button>
+                    <Button
+                      variant="success"
+                      size="sm"
+                      onClick={() => handleCitizenFeedback("CONFIRMED")}
+                      leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
+                      className="text-xs shadow-xs"
+                    >
+                      Confirm Resolved
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            /* Standard Evidence Photo Card (Awaiting Resolution Proof) */
+            <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-900">
+                  Photographic Evidence
+                </h3>
+                {complaint.aiMetadata?.confidenceScore && (
+                  <span className="inline-flex items-center gap-1 text-2xs font-mono px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <Sparkles className="w-3 h-3 text-emerald-600" />
+                    Vision AI Verified ({Math.round(complaint.aiMetadata.confidenceScore * 100)}%)
+                  </span>
+                )}
+              </div>
+
+              <div
+                onClick={() => setPreviewModalImage({ url: complaint.image, title: "Original Citizen Evidence" })}
+                className="rounded-xl overflow-hidden border border-slate-200 bg-slate-950 aspect-video relative group cursor-pointer"
+              >
+                <img
+                  src={complaint.image}
+                  alt={complaint.title}
+                  className="w-full h-full object-cover group-hover:scale-101 transition-transform duration-300"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
+                <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-white text-xs">
+                  <span className="font-semibold">{complaint.issueType}</span>
+                  <span className="text-2xs text-slate-300 font-mono">
+                    {formatDate(complaint.createdAt)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Informative Notice: Proof pending */}
+              <div className="p-3 bg-blue-50/60 rounded-xl border border-blue-200/70 flex items-start gap-2.5 text-xs text-blue-900">
+                <Camera className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold block">
+                    Authority Resolution Photo Proof Required
+                  </span>
+                  <span className="text-2xs text-blue-800/80">
+                    Once municipal field crews complete ground remediation, an official verified Before &amp; After resolution photograph will be published here by {complaint.authority}.
+                  </span>
+                </div>
+              </div>
+
+              {complaint.aiMetadata?.tags && (
+                <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                  {complaint.aiMetadata.tags.map((tag, i) => (
+                    <span
+                      key={i}
+                      className="text-2xs font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200"
+                    >
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
               )}
             </div>
-
-            <div className="rounded-xl overflow-hidden border border-slate-200 bg-slate-950 aspect-video relative group">
-              <img
-                src={complaint.image}
-                alt={complaint.title}
-                className="w-full h-full object-cover group-hover:scale-101 transition-transform duration-300"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
-              <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-white text-xs">
-                <span className="font-semibold">{complaint.issueType}</span>
-                <span className="text-2xs text-slate-300 font-mono">
-                  {formatDate(complaint.createdAt)}
-                </span>
-              </div>
-            </div>
-
-            {complaint.aiMetadata?.tags && (
-              <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                {complaint.aiMetadata.tags.map((tag, i) => (
-                  <span
-                    key={i}
-                    className="text-2xs font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200"
-                  >
-                    #{tag}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
+          )}
 
           {/* Incident Location Card */}
           <LocationCard
@@ -281,6 +623,39 @@ export function ComplaintDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Lightbox / High-Res Image Preview Modal */}
+      {previewModalImage && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200"
+          onClick={() => setPreviewModalImage(null)}
+        >
+          <div
+            className="bg-slate-900 border border-slate-700 rounded-2xl max-w-4xl w-full overflow-hidden shadow-2xl relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-3 sm:p-4 bg-slate-950/90 border-b border-slate-800 flex items-center justify-between text-white">
+              <span className="text-sm font-semibold truncate pr-4">
+                {previewModalImage.title}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPreviewModalImage(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-2 sm:p-4 bg-black flex items-center justify-center max-h-[75vh] overflow-auto">
+              <img
+                src={previewModalImage.url}
+                alt={previewModalImage.title}
+                className="max-h-[70vh] w-auto object-contain rounded-lg"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -234,7 +234,7 @@ export async function getComplaintById(id) {
 /**
  * Mock: Update complaint status from authority operations
  */
-export async function updateComplaintStatus(id, newStatus, note = "") {
+export async function updateComplaintStatus(id, newStatus, note = "", resolutionImage = "") {
   await delay(500);
   const list = getStoredComplaints();
   const index = list.findIndex((c) => c.id.toUpperCase() === id.toUpperCase());
@@ -251,6 +251,10 @@ export async function updateComplaintStatus(id, newStatus, note = "") {
   const oldStatus = complaint.status;
   complaint.status = newStatus;
   complaint.updatedAt = now;
+  if (resolutionImage) {
+    complaint.resolutionImage = resolutionImage;
+    complaint.resolution_image_url = resolutionImage;
+  }
 
   let stageTitle = `Status updated to ${newStatus}`;
   let defaultDesc = `Authority updated case status to ${newStatus}.`;

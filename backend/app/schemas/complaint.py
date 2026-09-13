@@ -29,6 +29,7 @@ class ComplaintResponse(BaseModel):
     complaint_title: str
     complaint_description: str
     image_url: str
+    resolution_image_url: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     location_text: Optional[str] = None

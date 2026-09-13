@@ -38,6 +38,8 @@ function normalizeComplaint(item) {
     severity: item.severity || "Medium",
     safetyRisk: item.safety_risk ?? item.safetyRisk ?? false,
     image: formatImageUrl(item.image_url || item.image || ""),
+    resolutionImage: formatImageUrl(item.resolution_image_url || item.resolutionImage || item.resolution_image || ""),
+    resolution_image_url: formatImageUrl(item.resolution_image_url || item.resolutionImage || item.resolution_image || ""),
     authority: typeof item.authority === "object" ? item.authority?.name : (item.authority || "Municipal Authority"),
     authority_id: typeof item.authority === "object" ? item.authority?.id : (item.authority_id || 1),
     location: {
@@ -249,16 +251,21 @@ export async function getComplaintById(id) {
  * 5. PATCH /api/complaints/{id}/status
  * Updates status and appends department audit entry
  */
-export async function updateComplaintStatus(id, status, note = "") {
+export async function updateComplaintStatus(id, status, note = "", resolutionImage = "") {
   if (IS_DEMO_MODE) {
-    return mockApi.updateComplaintStatus(id, status, note);
+    return mockApi.updateComplaintStatus(id, status, note, resolutionImage);
   }
 
   try {
+    const payload = { status, note };
+    if (resolutionImage) {
+      payload.resolution_image = resolutionImage;
+    }
+
     const res = await fetch(`${API_BASE_URL}/complaints/${encodeURIComponent(id)}/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status, note }),
+      body: JSON.stringify(payload),
     });
 
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -272,7 +279,7 @@ export async function updateComplaintStatus(id, status, note = "") {
     return { success: true, data: normalized };
   } catch (err) {
     console.warn("Live API update failed, falling back to mockApi:", err);
-    return mockApi.updateComplaintStatus(id, status, note);
+    return mockApi.updateComplaintStatus(id, status, note, resolutionImage);
   }
 }
 

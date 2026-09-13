@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { MapPin, Building2, Calendar, ArrowRight } from "lucide-react";
+import { MapPin, Building2, Calendar, ArrowRight, Camera } from "lucide-react";
 import { StatusBadge } from "./StatusBadge";
 import { SeverityBadge } from "./SeverityBadge";
 import { formatRelativeTime } from "../utils/formatters";
@@ -54,6 +54,12 @@ export function ComplaintCard({ complaint, linkPrefix = "/complaints", className
               </div>
 
               <div className="flex items-center gap-1.5">
+                {(complaint.status === "RESOLVED" || complaint.resolutionImage) && (
+                  <span className="inline-flex items-center gap-1 text-2xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <Camera className="w-3 h-3 text-emerald-600" />
+                    <span>Photo Proof</span>
+                  </span>
+                )}
                 <SeverityBadge severity={complaint.severity} safetyRisk={complaint.safetyRisk} size="sm" />
                 <StatusBadge status={complaint.status} size="sm" />
               </div>

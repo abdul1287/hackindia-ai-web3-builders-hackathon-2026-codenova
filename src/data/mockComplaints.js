@@ -98,6 +98,8 @@ export const INITIAL_COMPLAINTS = [
     description: "Streetlight fixture non-functional with exposed base wiring junction box at reachable height.",
     citizenNotes: "High risk during monsoon rains. Children play near this pole.",
     image: "https://images.unsplash.com/photo-1509114397022-ed747cca3f65?auto=format&fit=crop&w=800&q=80",
+    resolutionImage: "https://images.unsplash.com/photo-1519501025264-65ba15a82390?auto=format&fit=crop&w=800&q=80",
+    resolution_image_url: "https://images.unsplash.com/photo-1519501025264-65ba15a82390?auto=format&fit=crop&w=800&q=80",
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(), // 2 days ago
     updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 4).toISOString(),
     timeline: [

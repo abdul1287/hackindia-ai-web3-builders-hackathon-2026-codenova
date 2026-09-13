@@ -102,5 +102,6 @@ def update_status(
         db=db,
         identifier=id,
         new_status=payload.status.value,
-        note=payload.note
+        note=payload.note,
+        resolution_image=payload.resolution_image
     )

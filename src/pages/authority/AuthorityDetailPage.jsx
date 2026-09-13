@@ -14,6 +14,10 @@ import {
   FileCheck2,
   Truck,
   RotateCcw,
+  Camera,
+  Upload,
+  X,
+  ImageIcon,
 } from "lucide-react";
 import { PageHeader } from "../../components/PageHeader";
 import { Button } from "../../components/Button";
@@ -40,6 +44,7 @@ export function AuthorityDetailPage() {
   // Authority action state
   const [selectedStatus, setSelectedStatus] = useState("IN_PROGRESS");
   const [authorityNote, setAuthorityNote] = useState("");
+  const [resolutionImage, setResolutionImage] = useState("");
   const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
@@ -51,6 +56,9 @@ export function AuthorityDetailPage() {
         if (!isMounted) return;
         if (res.success && res.data) {
           setComplaint(res.data);
+          if (res.data.resolutionImage || res.data.resolution_image_url) {
+            setResolutionImage(res.data.resolutionImage || res.data.resolution_image_url);
+          }
           // Suggest next logical status
           if (res.data.status === "SUBMITTED") setSelectedStatus("IN_PROGRESS");
           else if (res.data.status === "IN_PROGRESS") setSelectedStatus("RESOLVED");
@@ -72,6 +80,31 @@ export function AuthorityDetailPage() {
     };
   }, [id]);
 
+  const handleImageUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      showToast({
+        title: "Invalid File",
+        message: "Please select an image file (JPG, PNG, WEBP).",
+        type: "error",
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setResolutionImage(event.target.result);
+      showToast({
+        title: "Proof Photo Ready",
+        message: "Ground resolution photograph attached.",
+        type: "success",
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleStatusUpdate = async (e) => {
     e.preventDefault();
     if (!complaint) return;
@@ -81,7 +114,8 @@ export function AuthorityDetailPage() {
       const res = await api.updateComplaintStatus(
         complaint.id,
         selectedStatus,
-        authorityNote.trim()
+        authorityNote.trim(),
+        resolutionImage
       );
 
       if (res.success && res.data) {
@@ -90,7 +124,7 @@ export function AuthorityDetailPage() {
 
         showToast({
           title: "Status Updated",
-          message: `Ticket ${complaint.id} updated to ${selectedStatus}. Citizen tracker notified.`,
+          message: `Ticket ${complaint.id} updated to ${selectedStatus}${resolutionImage ? " with photographic proof" : ""}. Citizen tracker notified.`,
           type: "success",
         });
       } else {
@@ -246,6 +280,36 @@ export function AuthorityDetailPage() {
             )}
           </div>
 
+          {/* Published Ground Resolution Proof Card */}
+          {(complaint.resolutionImage || complaint.resolution_image_url) && (
+            <div className="bg-white rounded-2xl border-2 border-emerald-500/30 p-5 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>Ground Resolution Proof Published</span>
+                </h3>
+                <span className="text-2xs font-semibold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  Citizen-Visible Audit Proof
+                </span>
+              </div>
+
+              <div className="rounded-xl overflow-hidden border border-slate-200 bg-slate-950 aspect-video relative group">
+                <img
+                  src={complaint.resolutionImage || complaint.resolution_image_url}
+                  alt="Ground Resolution Proof"
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
+                <div className="absolute bottom-3 left-3 right-3 text-white text-xs flex items-center justify-between">
+                  <span className="font-semibold text-emerald-400">Remediation Completed</span>
+                  <span className="font-mono text-2xs text-slate-300">
+                    {formatDate(complaint.updatedAt)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Location Details */}
           <LocationCard location={complaint.location} readOnly={true} />
         </div>
@@ -322,6 +386,99 @@ export function AuthorityDetailPage() {
                   }
                   className="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none"
                 />
+              </div>
+
+              {/* Resolution Photographic Proof Section */}
+              <div className="space-y-2 pt-2 border-t border-slate-100">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <Camera className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Resolution Proof Photograph</span>
+                  </label>
+                  {selectedStatus === "RESOLVED" && (
+                    <span className="text-2xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                      Citizen Verification Proof
+                    </span>
+                  )}
+                </div>
+
+                {resolutionImage ? (
+                  <div className="relative rounded-xl overflow-hidden border-2 border-emerald-500/50 bg-slate-950 group">
+                    <img
+                      src={resolutionImage}
+                      alt="Resolution Proof"
+                      className="w-full h-36 object-cover"
+                    />
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setResolutionImage("")}
+                        className="px-2.5 py-1 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-colors cursor-pointer shadow-sm flex items-center gap-1"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        <span>Remove Photo</span>
+                      </button>
+                    </div>
+                    <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between pointer-events-none">
+                      <span className="text-2xs font-semibold px-2.5 py-1 rounded-md bg-emerald-600 text-white flex items-center gap-1 shadow-sm">
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>Resolution Proof Attached</span>
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <label className="flex flex-col items-center justify-center p-3 border-2 border-dashed border-slate-200 hover:border-emerald-500 rounded-xl cursor-pointer bg-slate-50 hover:bg-emerald-50/40 transition-all text-center group">
+                      <Upload className="w-5 h-5 text-slate-400 group-hover:text-emerald-600 mb-1 transition-colors" />
+                      <span className="text-xs font-semibold text-slate-700 group-hover:text-emerald-900">
+                        Upload Completed Work Photo
+                      </span>
+                      <span className="text-2xs text-slate-400 mt-0.5">
+                        Capture with phone camera or select file (JPG, PNG)
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        className="hidden"
+                        onChange={handleImageUpload}
+                      />
+                    </label>
+
+                    {/* Quick Demo Presets for Live Hackathon Judging */}
+                    <div className="pt-1">
+                      <span className="text-2xs text-slate-400 block mb-1">
+                        Or select quick demonstration sample proof:
+                      </span>
+                      <div className="grid grid-cols-3 gap-1.5 text-2xs">
+                        <button
+                          type="button"
+                          onClick={() => setResolutionImage("https://images.unsplash.com/photo-1590496793929-36417d3117de?auto=format&fit=crop&w=800&q=80")}
+                          className="p-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-200 rounded-lg text-slate-600 font-medium text-center truncate border border-slate-200 transition-colors cursor-pointer"
+                          title="Repaved Asphalt Patch"
+                        >
+                          Fresh Asphalt Patch
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setResolutionImage("https://images.unsplash.com/photo-1517646287270-a5a9ca602e5c?auto=format&fit=crop&w=800&q=80")}
+                          className="p-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-200 rounded-lg text-slate-600 font-medium text-center truncate border border-slate-200 transition-colors cursor-pointer"
+                          title="Cleaned Sidewalk"
+                        >
+                          Cleared Waste Area
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setResolutionImage("https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=800&q=80")}
+                          className="p-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-200 rounded-lg text-slate-600 font-medium text-center truncate border border-slate-200 transition-colors cursor-pointer"
+                          title="Repaired Streetlight"
+                        >
+                          Fixed Streetlight
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <Button
