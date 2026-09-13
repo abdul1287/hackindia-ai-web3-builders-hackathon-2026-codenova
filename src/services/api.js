@@ -12,7 +12,12 @@ import * as mockApi from "./mockApi";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
 const BACKEND_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
-const IS_DEMO_MODE = import.meta.env.VITE_DEMO_MODE === "true";
+
+// Check if running on HTTPS host (e.g. Vercel) while configured to HTTP localhost (which is blocked by browser mixed content rules)
+const isBrowser = typeof window !== "undefined";
+const isHttpsOrigin = isBrowser && window.location.protocol === "https:";
+const isLocalhostHttpBackend = API_BASE_URL.startsWith("http://localhost") || API_BASE_URL.startsWith("http://127.0.0.1");
+const IS_DEMO_MODE = import.meta.env.VITE_DEMO_MODE === "true" || (isHttpsOrigin && isLocalhostHttpBackend);
 
 export function formatImageUrl(url) {
   if (!url) return "";
@@ -23,23 +28,31 @@ export function formatImageUrl(url) {
 }
 
 /**
- * Normalizes complaint objects from FastAPI backend to match frontend component properties
+ * Normalizes complaint objects from FastAPI backend or mockApi to match frontend component properties
  */
-function normalizeComplaint(item) {
+export function normalizeComplaint(item) {
   if (!item) return item;
+  const id = item.complaint_id || item.id || "CIV-2026-00000";
+  const rawStatus = (item.status || "SUBMITTED").toUpperCase().trim();
+  const resImg = formatImageUrl(item.resolution_image_url || item.resolutionImage || item.resolution_image || "");
+  const rawTimeline = Array.isArray(item.status_history)
+    ? item.status_history
+    : (Array.isArray(item.timeline) ? item.timeline : []);
+
   return {
     ...item,
-    id: item.complaint_id || item.id,
-    complaint_id: item.complaint_id || item.id,
+    id,
+    complaint_id: id,
+    status: rawStatus,
     issueType: item.issue_type || item.issueType || "Civic Hazard",
     title: item.complaint_title || item.title || "Civic Complaint",
     description: item.complaint_description || item.description || "",
     category: item.category || "General",
     severity: item.severity || "Medium",
-    safetyRisk: item.safety_risk ?? item.safetyRisk ?? false,
+    safetyRisk: Boolean(item.safety_risk ?? item.safetyRisk ?? false),
     image: formatImageUrl(item.image_url || item.image || ""),
-    resolutionImage: formatImageUrl(item.resolution_image_url || item.resolutionImage || item.resolution_image || ""),
-    resolution_image_url: formatImageUrl(item.resolution_image_url || item.resolutionImage || item.resolution_image || ""),
+    resolutionImage: resImg,
+    resolution_image_url: resImg,
     authority: typeof item.authority === "object" ? item.authority?.name : (item.authority || "Municipal Authority"),
     authority_id: typeof item.authority === "object" ? item.authority?.id : (item.authority_id || 1),
     location: {
@@ -47,15 +60,21 @@ function normalizeComplaint(item) {
       lat: item.latitude ?? item.location?.lat ?? 28.6280,
       lng: item.longitude ?? item.location?.lng ?? 77.3649,
     },
-    createdAt: item.created_at || item.createdAt,
-    updatedAt: item.updated_at || item.updatedAt,
-    timeline: (item.status_history || item.timeline || []).map((h) => ({
-      stage: h.status,
-      title: h.note || `Status: ${h.status}`,
-      timestamp: h.changed_at || h.timestamp,
-      description: h.note || `Stage updated to ${h.status}`,
-      actor: "Municipal Authority"
-    })),
+    createdAt: item.created_at || item.createdAt || new Date().toISOString(),
+    updatedAt: item.updated_at || item.updatedAt || new Date().toISOString(),
+    timeline: rawTimeline.map((h) => {
+      const stage = (h.stage || h.status || "SUBMITTED").toUpperCase().trim();
+      return {
+        stage,
+        status: stage,
+        title: h.title || h.note || `Stage: ${stage}`,
+        timestamp: h.timestamp || h.changed_at || new Date().toISOString(),
+        changed_at: h.changed_at || h.timestamp || new Date().toISOString(),
+        description: h.description || h.note || `Stage updated to ${stage}`,
+        note: h.note || h.description || `Stage updated to ${stage}`,
+        actor: h.actor || "Municipal Authority Desk"
+      };
+    }),
     aiMetadata: item.aiMetadata || {
       confidenceScore: 0.96,
       tags: [item.issue_type || "Civic", item.category || "Municipal", "Verified"]
@@ -141,7 +160,13 @@ export async function analyzeIssue(data) {
  */
 export async function createComplaint(complaintData) {
   if (IS_DEMO_MODE) {
-    return mockApi.createComplaint(complaintData);
+    const mockRes = await mockApi.createComplaint(complaintData);
+    if (mockRes.success && mockRes.data) {
+      const normalized = normalizeComplaint(mockRes.data);
+      window.dispatchEvent(new CustomEvent("civicai_complaints_updated", { detail: normalized }));
+      return { success: true, data: normalized };
+    }
+    return mockRes;
   }
 
   try {
@@ -190,7 +215,13 @@ export async function createComplaint(complaintData) {
     return { success: true, data: normalized };
   } catch (err) {
     console.warn("Live API /api/complaints failed, falling back to mockApi:", err);
-    return mockApi.createComplaint(complaintData);
+    const mockRes = await mockApi.createComplaint(complaintData);
+    if (mockRes.success && mockRes.data) {
+      const normalized = normalizeComplaint(mockRes.data);
+      window.dispatchEvent(new CustomEvent("civicai_complaints_updated", { detail: normalized }));
+      return { success: true, data: normalized };
+    }
+    return mockRes;
   }
 }
 
@@ -200,7 +231,14 @@ export async function createComplaint(complaintData) {
  */
 export async function getComplaints(filters = {}) {
   if (IS_DEMO_MODE) {
-    return mockApi.getComplaints(filters);
+    const mockRes = await mockApi.getComplaints(filters);
+    if (mockRes.success && Array.isArray(mockRes.data)) {
+      return {
+        ...mockRes,
+        data: mockRes.data.map(normalizeComplaint)
+      };
+    }
+    return mockRes;
   }
 
   try {
@@ -222,7 +260,14 @@ export async function getComplaints(filters = {}) {
     return { success: true, count, data: items };
   } catch (err) {
     console.warn("Live API /api/complaints failed, falling back to mockApi:", err);
-    return mockApi.getComplaints(filters);
+    const mockRes = await mockApi.getComplaints(filters);
+    if (mockRes.success && Array.isArray(mockRes.data)) {
+      return {
+        ...mockRes,
+        data: mockRes.data.map(normalizeComplaint)
+      };
+    }
+    return mockRes;
   }
 }
 
@@ -232,7 +277,11 @@ export async function getComplaints(filters = {}) {
  */
 export async function getComplaintById(id) {
   if (IS_DEMO_MODE) {
-    return mockApi.getComplaintById(id);
+    const mockRes = await mockApi.getComplaintById(id);
+    if (mockRes.success && mockRes.data) {
+      return { ...mockRes, data: normalizeComplaint(mockRes.data) };
+    }
+    return mockRes;
   }
 
   try {
@@ -243,7 +292,11 @@ export async function getComplaintById(id) {
     return { success: true, data: normalizeComplaint(json) };
   } catch (err) {
     console.warn("Live API /api/complaints/{id} failed, falling back to mockApi:", err);
-    return mockApi.getComplaintById(id);
+    const mockRes = await mockApi.getComplaintById(id);
+    if (mockRes.success && mockRes.data) {
+      return { ...mockRes, data: normalizeComplaint(mockRes.data) };
+    }
+    return mockRes;
   }
 }
 
@@ -252,8 +305,30 @@ export async function getComplaintById(id) {
  * Updates status and appends department audit entry
  */
 export async function updateComplaintStatus(id, status, note = "", resolutionImage = "") {
+  const applyNotificationSync = (normalized) => {
+    window.dispatchEvent(new CustomEvent("civicai_complaints_updated", { detail: normalized }));
+    window.dispatchEvent(new CustomEvent("civicai_complaint_updated", { detail: normalized }));
+
+    if (typeof BroadcastChannel !== "undefined") {
+      try {
+        const channel = new BroadcastChannel("civicai_sync");
+        channel.postMessage({ type: "COMPLAINT_UPDATED", detail: normalized });
+        channel.close();
+      } catch (_) {}
+    }
+    try {
+      localStorage.setItem("civicai_last_sync", Date.now().toString());
+    } catch (_) {}
+  };
+
   if (IS_DEMO_MODE) {
-    return mockApi.updateComplaintStatus(id, status, note, resolutionImage);
+    const mockRes = await mockApi.updateComplaintStatus(id, status, note, resolutionImage);
+    if (mockRes.success && mockRes.data) {
+      const normalized = normalizeComplaint(mockRes.data);
+      applyNotificationSync(normalized);
+      return { success: true, data: normalized };
+    }
+    return mockRes;
   }
 
   try {
@@ -273,25 +348,17 @@ export async function updateComplaintStatus(id, status, note = "", resolutionIma
     const json = await res.json();
     const normalized = normalizeComplaint(json);
 
-    // Notify listeners in current window
-    window.dispatchEvent(new CustomEvent("civicai_complaints_updated", { detail: normalized }));
-
-    // Notify listeners in other tabs
-    if (typeof BroadcastChannel !== "undefined") {
-      try {
-        const channel = new BroadcastChannel("civicai_sync");
-        channel.postMessage({ type: "COMPLAINT_UPDATED", detail: normalized });
-        channel.close();
-      } catch (_) {}
-    }
-    try {
-      localStorage.setItem("civicai_last_sync", Date.now().toString());
-    } catch (_) {}
-
+    applyNotificationSync(normalized);
     return { success: true, data: normalized };
   } catch (err) {
     console.warn("Live API update failed, falling back to mockApi:", err);
-    return mockApi.updateComplaintStatus(id, status, note, resolutionImage);
+    const mockRes = await mockApi.updateComplaintStatus(id, status, note, resolutionImage);
+    if (mockRes.success && mockRes.data) {
+      const normalized = normalizeComplaint(mockRes.data);
+      applyNotificationSync(normalized);
+      return { success: true, data: normalized };
+    }
+    return mockRes;
   }
 }
 

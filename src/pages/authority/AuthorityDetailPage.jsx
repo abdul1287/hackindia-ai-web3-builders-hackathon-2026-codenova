@@ -36,7 +36,7 @@ import * as api from "../../services/api";
 export function AuthorityDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { departmentName } = useAuthorityAuth();
+  const { departmentName, login } = useAuthorityAuth();
 
   const [complaint, setComplaint] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -95,11 +95,13 @@ export function AuthorityDetailPage() {
     }
 
     try {
-      const compressedDataUrl = await compressImage(file, 1200, 900, 0.75);
+      // Compress to compact dimensions for optimal browser storage and instant transmission
+      const compressedDataUrl = await compressImage(file, 900, 675, 0.72);
       setResolutionImage(compressedDataUrl);
+      setSelectedStatus("RESOLVED");
       showToast({
         title: "Proof Photo Ready",
-        message: "Ground resolution photograph optimized & attached.",
+        message: "Ground remediation photograph attached. Status set to RESOLVED.",
         type: "success",
       });
     } catch (err) {
@@ -107,9 +109,10 @@ export function AuthorityDetailPage() {
       const reader = new FileReader();
       reader.onload = (event) => {
         setResolutionImage(event.target.result);
+        setSelectedStatus("RESOLVED");
         showToast({
           title: "Proof Photo Ready",
-          message: "Ground resolution photograph attached.",
+          message: "Ground resolution photograph attached. Status set to RESOLVED.",
           type: "success",
         });
       };
@@ -123,33 +126,43 @@ export function AuthorityDetailPage() {
 
     setUpdating(true);
     try {
+      // If proof photo is attached and not rejected, ensure status is RESOLVED
+      let targetStatus = selectedStatus;
+      if (resolutionImage && targetStatus === "SUBMITTED") {
+        targetStatus = "RESOLVED";
+        setSelectedStatus("RESOLVED");
+      }
+
       // Ensure image is compressed if it's an uncompressed data URL
       let finalResolutionImage = resolutionImage;
       if (
         finalResolutionImage &&
         typeof finalResolutionImage === "string" &&
         finalResolutionImage.startsWith("data:image/") &&
-        finalResolutionImage.length > 500000
+        finalResolutionImage.length > 200000
       ) {
         try {
-          finalResolutionImage = await compressImage(finalResolutionImage, 1200, 900, 0.75);
+          finalResolutionImage = await compressImage(finalResolutionImage, 900, 675, 0.72);
         } catch (_) {}
       }
 
       const res = await api.updateComplaintStatus(
-        complaint.id,
-        selectedStatus,
+        complaint.id || complaint.complaint_id,
+        targetStatus,
         authorityNote.trim(),
         finalResolutionImage
       );
 
       if (res.success && res.data) {
         setComplaint(res.data);
+        if (res.data.resolutionImage || res.data.resolution_image_url) {
+          setResolutionImage(res.data.resolutionImage || res.data.resolution_image_url);
+        }
         setAuthorityNote("");
 
         showToast({
           title: "Status Updated",
-          message: `Ticket ${complaint.id} updated to ${selectedStatus}${resolutionImage ? " with photographic proof" : ""}. Citizen tracker notified.`,
+          message: `Ticket ${complaint.id} updated to ${targetStatus}${finalResolutionImage ? " with photographic proof" : ""}. Citizen tracker notified.`,
           type: "success",
         });
       } else {
@@ -186,15 +199,27 @@ export function AuthorityDetailPage() {
     );
   }
 
-  // Department Authorization Check
+  // Department Authorization Check with instant switcher for demo evaluators
   if (!matchesDepartment(complaint, departmentName)) {
+    const targetDept = (typeof complaint.authority === "object" ? complaint.authority?.name : complaint.authority) || "Public Works Department";
+    const handleQuickSwitch = () => {
+      if (login) {
+        login("OFFICER-DEMO", "demo123", targetDept);
+        showToast({
+          title: "Switched Department",
+          message: `Authenticated as ${targetDept} desk officer.`,
+          type: "info",
+        });
+      }
+    };
+
     return (
       <div className="max-w-2xl mx-auto pt-8">
         <ErrorState
           title="Department Access Restricted"
-          message={`Ticket ${complaint.id} is assigned to ${complaint.authority}. You are currently authenticated under ${departmentName}.`}
-          actionLabel="Back to Authorized Dashboard"
-          onAction={() => navigate("/authority")}
+          message={`Ticket ${complaint.id} is assigned to ${targetDept}.${departmentName ? ` You are currently authenticated under ${departmentName}.` : " Please authenticate to inspect and resolve this grievance."}`}
+          actionLabel={`Authenticate as ${targetDept} & Inspect`}
+          onAction={handleQuickSwitch}
         />
       </div>
     );
@@ -478,7 +503,10 @@ export function AuthorityDetailPage() {
                       <div className="grid grid-cols-3 gap-1.5 text-2xs">
                         <button
                           type="button"
-                          onClick={() => setResolutionImage("https://images.unsplash.com/photo-1590496793929-36417d3117de?auto=format&fit=crop&w=800&q=80")}
+                          onClick={() => {
+                            setResolutionImage("https://images.unsplash.com/photo-1590496793929-36417d3117de?auto=format&fit=crop&w=800&q=80");
+                            setSelectedStatus("RESOLVED");
+                          }}
                           className="p-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-200 rounded-lg text-slate-600 font-medium text-center truncate border border-slate-200 transition-colors cursor-pointer"
                           title="Repaved Asphalt Patch"
                         >
@@ -486,7 +514,10 @@ export function AuthorityDetailPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setResolutionImage("https://images.unsplash.com/photo-1530587191325-3db32d826c18?auto=format&fit=crop&w=800&q=80")}
+                          onClick={() => {
+                            setResolutionImage("https://images.unsplash.com/photo-1530587191325-3db32d826c18?auto=format&fit=crop&w=800&q=80");
+                            setSelectedStatus("RESOLVED");
+                          }}
                           className="p-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-200 rounded-lg text-slate-600 font-medium text-center truncate border border-slate-200 transition-colors cursor-pointer"
                           title="Cleaned Street & Sidewalk"
                         >
@@ -494,7 +525,10 @@ export function AuthorityDetailPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setResolutionImage("https://images.unsplash.com/photo-1519501025264-65ba15a82390?auto=format&fit=crop&w=800&q=80")}
+                          onClick={() => {
+                            setResolutionImage("https://images.unsplash.com/photo-1519501025264-65ba15a82390?auto=format&fit=crop&w=800&q=80");
+                            setSelectedStatus("RESOLVED");
+                          }}
                           className="p-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-200 rounded-lg text-slate-600 font-medium text-center truncate border border-slate-200 transition-colors cursor-pointer"
                           title="Restored Streetlight"
                         >

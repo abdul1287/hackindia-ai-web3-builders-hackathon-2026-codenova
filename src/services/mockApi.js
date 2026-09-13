@@ -6,42 +6,125 @@ const STORAGE_KEY = "civicai_complaints_db_v1";
 
 let memoryComplaints = null;
 
+export function normalizeMockComplaint(c) {
+  if (!c) return c;
+  const id = c.id || c.complaint_id || "CIV-2026-00000";
+  const resImg = c.resolutionImage || c.resolution_image_url || c.resolution_image || "";
+  const rawTimeline = Array.isArray(c.timeline) ? c.timeline : (Array.isArray(c.status_history) ? c.status_history : []);
+
+  return {
+    ...c,
+    id,
+    complaint_id: id,
+    status: (c.status || "SUBMITTED").toUpperCase().trim(),
+    issueType: c.issueType || c.issue_type || "Civic Hazard",
+    title: c.title || c.complaint_title || "Civic Grievance",
+    description: c.description || c.complaint_description || "",
+    category: c.category || "General Municipal",
+    severity: c.severity || "Medium",
+    safetyRisk: Boolean(c.safetyRisk ?? c.safety_risk),
+    authority: typeof c.authority === "object" ? c.authority?.name : (c.authority || "Public Works Department"),
+    authority_id: typeof c.authority === "object" ? c.authority?.id : (c.authority_id || 1),
+    image: c.image || c.image_url || "",
+    resolutionImage: resImg,
+    resolution_image_url: resImg,
+    createdAt: c.createdAt || c.created_at || new Date().toISOString(),
+    updatedAt: c.updatedAt || c.updated_at || new Date().toISOString(),
+    timeline: rawTimeline.map((h) => {
+      const stage = (h.stage || h.status || "SUBMITTED").toUpperCase().trim();
+      return {
+        stage,
+        status: stage,
+        title: h.title || h.note || `Stage: ${stage}`,
+        description: h.description || h.note || `Ticket updated to ${stage}.`,
+        note: h.note || h.description || `Ticket updated to ${stage}.`,
+        timestamp: h.timestamp || h.changed_at || new Date().toISOString(),
+        changed_at: h.changed_at || h.timestamp || new Date().toISOString(),
+        actor: h.actor || "Municipal Authority Desk"
+      };
+    }),
+    aiMetadata: c.aiMetadata || {
+      confidenceScore: 0.95,
+      tags: ["Vision AI Verified", "Geo-tagged"]
+    },
+    location: c.location || {
+      address: c.location_text || "Sector 62, Noida, Uttar Pradesh",
+      lat: c.latitude ?? 28.6280,
+      lng: c.longitude ?? 77.3649
+    }
+  };
+}
+
 // Helper to get complaints from localStorage with initial fallback and memory cache
-function getStoredComplaints() {
+export function getStoredComplaints() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      if (!memoryComplaints) {
-        memoryComplaints = [...INITIAL_COMPLAINTS];
+      if (!memoryComplaints || memoryComplaints.length === 0) {
+        memoryComplaints = INITIAL_COMPLAINTS.map(normalizeMockComplaint);
         try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_COMPLAINTS));
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(memoryComplaints));
         } catch (_) {}
       }
-      return memoryComplaints;
+      return memoryComplaints.map(normalizeMockComplaint);
     }
     const parsed = JSON.parse(raw);
-    memoryComplaints = parsed;
-    return parsed;
+    const normalized = Array.isArray(parsed) ? parsed.map(normalizeMockComplaint) : INITIAL_COMPLAINTS.map(normalizeMockComplaint);
+    memoryComplaints = normalized;
+    return normalized;
   } catch (err) {
     console.warn("Error reading from localStorage, using in-memory mock data:", err);
-    return memoryComplaints || INITIAL_COMPLAINTS;
+    if (!memoryComplaints) {
+      memoryComplaints = INITIAL_COMPLAINTS.map(normalizeMockComplaint);
+    }
+    return memoryComplaints.map(normalizeMockComplaint);
   }
 }
 
-// Helper to save complaints to localStorage with quota protection and cross-tab sync
-function saveComplaints(complaints) {
-  memoryComplaints = complaints;
+// Helper to sanitize payload for safe localStorage quota retention
+function createPrunedComplaints(complaints, activeId = null) {
+  return complaints.map((c, idx) => {
+    const isCurrent = activeId ? (c.id === activeId || c.complaint_id === activeId) : idx < 2;
+    // For active/current complaints, preserve full resolution proof
+    if (isCurrent) return c;
 
+    // For older complaints, if image or resolutionImage is enormous base64 (> 100KB), replace with fallback preview
+    let copy = { ...c };
+    if (copy.image && copy.image.startsWith("data:image/") && copy.image.length > 80000) {
+      copy.image = "https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?auto=format&fit=crop&w=400&q=70";
+    }
+    if (copy.resolutionImage && copy.resolutionImage.startsWith("data:image/") && copy.resolutionImage.length > 80000) {
+      copy.resolutionImage = "https://images.unsplash.com/photo-1590496793929-36417d3117de?auto=format&fit=crop&w=400&q=70";
+      copy.resolution_image_url = copy.resolutionImage;
+    }
+    return copy;
+  });
+}
+
+// Helper to save complaints to localStorage with quota protection and cross-tab sync
+export function saveComplaints(complaints, singleUpdatedComplaint = null) {
+  const normalizedList = (complaints || []).map(normalizeMockComplaint);
+  memoryComplaints = normalizedList;
+
+  const targetSingle = singleUpdatedComplaint ? normalizeMockComplaint(singleUpdatedComplaint) : null;
+
+  // 1. Try direct write of normalized data
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(complaints));
-  } catch (err) {
-    console.warn("Direct localStorage write failed (quota limit), applying fallback compression:", err);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizedList));
+  } catch (quotaErr) {
+    console.warn("Direct localStorage write failed (quota limit), pruning older entries to fit:", quotaErr);
     try {
-      // If quota exceeded, clean up any redundant data
-      localStorage.removeItem(STORAGE_KEY);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(complaints));
+      // 2. Prune older base64 entries to stay well within 5MB limit
+      const pruned = createPrunedComplaints(normalizedList, targetSingle?.id);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(pruned));
     } catch (retryErr) {
-      console.error("Critical: Unable to persist complaints to localStorage:", retryErr);
+      console.warn("Second write failed, keeping top 10 complaints in storage:", retryErr);
+      try {
+        const top10 = createPrunedComplaints(normalizedList.slice(0, 10), targetSingle?.id);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(top10));
+      } catch (critErr) {
+        console.error("Critical: Storage quota exhausted, keeping changes in-memory:", critErr);
+      }
     }
   }
 
@@ -49,7 +132,11 @@ function saveComplaints(complaints) {
   if (typeof BroadcastChannel !== "undefined") {
     try {
       const channel = new BroadcastChannel("civicai_sync");
-      channel.postMessage({ type: "COMPLAINTS_UPDATED", detail: complaints });
+      channel.postMessage({
+        type: "COMPLAINTS_UPDATED",
+        detail: normalizedList,
+        single: targetSingle
+      });
       channel.close();
     } catch (_) {}
   }
@@ -59,8 +146,17 @@ function saveComplaints(complaints) {
     localStorage.setItem("civicai_last_sync", Date.now().toString());
   } catch (_) {}
 
-  // Dispatch window event for current tab
-  window.dispatchEvent(new CustomEvent("civicai_complaints_updated", { detail: complaints }));
+  // Dispatch window events for current tab
+  window.dispatchEvent(new CustomEvent("civicai_complaints_updated", {
+    detail: normalizedList,
+    single: targetSingle
+  }));
+
+  if (targetSingle) {
+    window.dispatchEvent(new CustomEvent("civicai_complaint_updated", {
+      detail: targetSingle
+    }));
+  }
 }
 
 // Simulated network delay helper
@@ -194,12 +290,13 @@ export async function createComplaint(complaintPayload) {
     }
   };
 
-  const updated = [newComplaint, ...complaints];
-  saveComplaints(updated);
+  const normalized = normalizeMockComplaint(newComplaint);
+  const updated = [normalized, ...complaints];
+  saveComplaints(updated, normalized);
 
   return {
     success: true,
-    data: newComplaint
+    data: normalized
   };
 }
 
@@ -248,9 +345,10 @@ export async function getComplaints(filters = {}) {
  * Mock: Get single complaint by ID
  */
 export async function getComplaintById(id) {
-  await delay(250);
+  await delay(200);
   const list = getStoredComplaints();
-  const complaint = list.find((c) => c.id.toUpperCase() === id.toUpperCase());
+  const searchId = (id || "").toString().trim().toUpperCase();
+  const complaint = list.find((c) => (c.id || c.complaint_id || "").toString().trim().toUpperCase() === searchId);
 
   if (!complaint) {
     return {
@@ -259,9 +357,10 @@ export async function getComplaintById(id) {
     };
   }
 
+  const normalized = normalizeMockComplaint(complaint);
   return {
     success: true,
-    data: complaint
+    data: normalized
   };
 }
 
@@ -269,9 +368,10 @@ export async function getComplaintById(id) {
  * Mock: Update complaint status from authority operations
  */
 export async function updateComplaintStatus(id, newStatus, note = "", resolutionImage = "") {
-  await delay(500);
+  await delay(250);
   const list = getStoredComplaints();
-  const index = list.findIndex((c) => c.id.toUpperCase() === id.toUpperCase());
+  const searchId = (id || "").toString().trim().toUpperCase();
+  const index = list.findIndex((c) => (c.id || c.complaint_id || "").toString().trim().toUpperCase() === searchId);
 
   if (index === -1) {
     return {
@@ -281,46 +381,56 @@ export async function updateComplaintStatus(id, newStatus, note = "", resolution
   }
 
   const now = new Date().toISOString();
-  const complaint = { ...list[index] };
-  const oldStatus = complaint.status;
-  complaint.status = newStatus;
+  const normStatus = (newStatus || "RESOLVED").toUpperCase().trim();
+  const rawTarget = list[index];
+  const complaint = { ...rawTarget };
+  complaint.status = normStatus;
   complaint.updatedAt = now;
+
   if (resolutionImage) {
     complaint.resolutionImage = resolutionImage;
     complaint.resolution_image_url = resolutionImage;
   }
 
-  let stageTitle = `Status updated to ${newStatus}`;
-  let defaultDesc = `Authority updated case status to ${newStatus}.`;
+  let stageTitle = `Status updated to ${normStatus}`;
+  let defaultDesc = `Authority updated case status to ${normStatus}.`;
 
-  if (newStatus === "IN_PROGRESS") {
+  if (normStatus === "IN_PROGRESS") {
     stageTitle = "Work Crew Dispatched & Action In Progress";
     defaultDesc = note || "Municipal task force dispatched to ground location for rectifying the issue.";
-  } else if (newStatus === "RESOLVED") {
+  } else if (normStatus === "RESOLVED") {
     stageTitle = "Issue Resolved and Inspected";
-    defaultDesc = note || "Civil work successfully completed and verified by the sector field supervisor.";
-  } else if (newStatus === "REJECTED") {
+    defaultDesc = note || "Ground remediation verified and closed by the sector field supervisor with photographic proof.";
+  } else if (normStatus === "REJECTED") {
     stageTitle = "Case Closed / Unactionable";
     defaultDesc = note || "Issue reviewed and determined outside municipal jurisdiction or duplicate.";
   }
 
+  const existingTimeline = Array.isArray(complaint.timeline)
+    ? complaint.timeline
+    : (Array.isArray(complaint.status_history) ? complaint.status_history : []);
+
   complaint.timeline = [
-    ...complaint.timeline,
+    ...existingTimeline,
     {
-      stage: newStatus,
+      stage: normStatus,
+      status: normStatus,
       title: stageTitle,
       timestamp: now,
+      changed_at: now,
       description: defaultDesc,
+      note: defaultDesc,
       actor: "Municipal Authority Desk"
     }
   ];
 
-  list[index] = complaint;
-  saveComplaints(list);
+  const normalizedComplaint = normalizeMockComplaint(complaint);
+  list[index] = normalizedComplaint;
+  saveComplaints(list, normalizedComplaint);
 
   return {
     success: true,
-    data: complaint
+    data: normalizedComplaint
   };
 }
 
@@ -328,7 +438,7 @@ export async function updateComplaintStatus(id, newStatus, note = "", resolution
  * Reset local database to defaults (useful for hackathon demo restart)
  */
 export function resetMockDatabase() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_COMPLAINTS));
-  window.dispatchEvent(new CustomEvent("civicai_complaints_updated", { detail: INITIAL_COMPLAINTS }));
-  return INITIAL_COMPLAINTS;
+  const initial = INITIAL_COMPLAINTS.map(normalizeMockComplaint);
+  saveComplaints(initial);
+  return initial;
 }

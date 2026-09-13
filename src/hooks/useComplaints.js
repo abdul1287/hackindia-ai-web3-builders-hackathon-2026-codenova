@@ -27,14 +27,32 @@ export function useComplaints(initialFilters = {}) {
   useEffect(() => {
     fetchComplaints();
 
-    // Listen for cross-component and cross-page state updates
+    // Listen for cross-component, cross-page, and cross-tab state updates
     const handleUpdate = () => {
       fetchComplaints();
     };
 
     window.addEventListener("civicai_complaints_updated", handleUpdate);
+    window.addEventListener("civicai_complaint_updated", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+
+    let channel = null;
+    if (typeof BroadcastChannel !== "undefined") {
+      try {
+        channel = new BroadcastChannel("civicai_sync");
+        channel.onmessage = () => {
+          handleUpdate();
+        };
+      } catch (_) {}
+    }
+
     return () => {
       window.removeEventListener("civicai_complaints_updated", handleUpdate);
+      window.removeEventListener("civicai_complaint_updated", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+      if (channel) {
+        channel.close();
+      }
     };
   }, [fetchComplaints]);
 

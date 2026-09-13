@@ -68,9 +68,24 @@ export function ComplaintDetailPage() {
 
     // Listen to updates from authority actions (in current tab, other tabs, or storage sync)
     const handleUpdate = (event) => {
-      // If the event provided the updated complaint directly, apply immediately
-      if (event?.detail && (event.detail.id === id || event.detail.complaint_id === id)) {
-        if (isMounted) setComplaint(event.detail);
+      const searchId = (id || "").toString().trim().toUpperCase();
+
+      // Check single complaint update
+      const single = event?.single || (event?.detail && !Array.isArray(event.detail) ? event.detail : null);
+      if (single && (single.id || single.complaint_id)) {
+        const singleId = (single.id || single.complaint_id).toString().trim().toUpperCase();
+        if (singleId === searchId) {
+          if (isMounted) setComplaint(single);
+        }
+      }
+
+      // Check array update
+      const list = Array.isArray(event?.detail) ? event.detail : (Array.isArray(event) ? event : null);
+      if (list) {
+        const found = list.find((c) => (c.id || c.complaint_id || "").toString().trim().toUpperCase() === searchId);
+        if (found && isMounted) {
+          setComplaint(found);
+        }
       }
 
       api.getComplaintById(id).then((res) => {
@@ -81,6 +96,7 @@ export function ComplaintDetailPage() {
     };
 
     window.addEventListener("civicai_complaints_updated", handleUpdate);
+    window.addEventListener("civicai_complaint_updated", handleUpdate);
     window.addEventListener("storage", handleUpdate);
 
     let channel = null;
@@ -89,7 +105,7 @@ export function ComplaintDetailPage() {
         channel = new BroadcastChannel("civicai_sync");
         channel.onmessage = (msg) => {
           if (msg.data?.type === "COMPLAINT_UPDATED" || msg.data?.type === "COMPLAINTS_UPDATED") {
-            handleUpdate({ detail: msg.data.detail });
+            handleUpdate({ detail: msg.data.detail, single: msg.data.single });
           }
         };
       } catch (_) {}
@@ -98,6 +114,7 @@ export function ComplaintDetailPage() {
     return () => {
       isMounted = false;
       window.removeEventListener("civicai_complaints_updated", handleUpdate);
+      window.removeEventListener("civicai_complaint_updated", handleUpdate);
       window.removeEventListener("storage", handleUpdate);
       if (channel) {
         channel.close();
