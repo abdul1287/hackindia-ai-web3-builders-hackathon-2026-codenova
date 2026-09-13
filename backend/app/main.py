@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
     # Ensure resolution_image_url column exists in complaints table
     try:
         with engine.connect() as conn:
-            conn.execute(text("ALTER TABLE complaints ADD COLUMN resolution_image_url VARCHAR(500)"))
+            conn.execute(text("ALTER TABLE complaints ADD COLUMN resolution_image_url TEXT"))
             conn.commit()
     except Exception:
         pass  # Column already exists

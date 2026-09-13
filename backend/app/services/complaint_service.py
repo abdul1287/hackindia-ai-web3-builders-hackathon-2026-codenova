@@ -154,7 +154,28 @@ def update_complaint_status(
     complaint.status = norm_status
     complaint.updated_at = now
     if resolution_image:
-        complaint.resolution_image_url = resolution_image
+        if resolution_image.startswith("data:image/"):
+            try:
+                import base64
+                import uuid
+                from app.services.cloudinary_service import UPLOAD_DIR
+                header, encoded = resolution_image.split(",", 1)
+                ext = ".jpg"
+                if "png" in header:
+                    ext = ".png"
+                elif "webp" in header:
+                    ext = ".webp"
+                file_bytes = base64.b64decode(encoded)
+                filename = f"resolution_{uuid.uuid4().hex}{ext}"
+                filepath = os.path.join(UPLOAD_DIR, filename)
+                with open(filepath, "wb") as f:
+                    f.write(file_bytes)
+                complaint.resolution_image_url = f"/uploads/{filename}"
+            except Exception as e:
+                print(f"[Warning] Failed to decode resolution image data URL: {e}")
+                complaint.resolution_image_url = resolution_image
+        else:
+            complaint.resolution_image_url = resolution_image
 
     # Record history entry
     default_notes = {

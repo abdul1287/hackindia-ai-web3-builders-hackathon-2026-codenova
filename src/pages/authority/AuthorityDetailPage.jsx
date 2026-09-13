@@ -461,17 +461,17 @@ export function AuthorityDetailPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setResolutionImage("https://images.unsplash.com/photo-1517646287270-a5a9ca602e5c?auto=format&fit=crop&w=800&q=80")}
+                          onClick={() => setResolutionImage("https://images.unsplash.com/photo-1530587191325-3db32d826c18?auto=format&fit=crop&w=800&q=80")}
                           className="p-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-200 rounded-lg text-slate-600 font-medium text-center truncate border border-slate-200 transition-colors cursor-pointer"
-                          title="Cleaned Sidewalk"
+                          title="Cleaned Street & Sidewalk"
                         >
                           Cleared Waste Area
                         </button>
                         <button
                           type="button"
-                          onClick={() => setResolutionImage("https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=800&q=80")}
+                          onClick={() => setResolutionImage("https://images.unsplash.com/photo-1519501025264-65ba15a82390?auto=format&fit=crop&w=800&q=80")}
                           className="p-1.5 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-200 rounded-lg text-slate-600 font-medium text-center truncate border border-slate-200 transition-colors cursor-pointer"
-                          title="Repaired Streetlight"
+                          title="Restored Streetlight"
                         >
                           Fixed Streetlight
                         </button>

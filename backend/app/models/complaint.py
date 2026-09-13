@@ -21,7 +21,7 @@ class Complaint(Base):
     complaint_title: Mapped[str] = mapped_column(String(255), nullable=False)
     complaint_description: Mapped[str] = mapped_column(Text, nullable=False)
     image_url: Mapped[str] = mapped_column(String(500), nullable=False)
-    resolution_image_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    resolution_image_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     latitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     location_text: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

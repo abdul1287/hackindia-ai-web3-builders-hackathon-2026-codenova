@@ -31,22 +31,6 @@ import { showToast } from "../../components/Toast";
 import { formatDate } from "../../utils/formatters";
 import * as api from "../../services/api";
 
-function getContextualResolutionFallback(c) {
-  if (!c) return "https://images.unsplash.com/photo-1590496793929-36417d3117de?auto=format&fit=crop&w=800&q=80";
-  const type = (c.issueType || "").toLowerCase();
-  const cat = (c.category || "").toLowerCase();
-  if (type.includes("pothole") || cat.includes("road")) {
-    return "https://images.unsplash.com/photo-1590496793929-36417d3117de?auto=format&fit=crop&w=800&q=80";
-  }
-  if (type.includes("garbage") || type.includes("waste") || cat.includes("sanitation")) {
-    return "https://images.unsplash.com/photo-1517646287270-a5a9ca602e5c?auto=format&fit=crop&w=800&q=80";
-  }
-  if (type.includes("light") || cat.includes("electr")) {
-    return "https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=800&q=80";
-  }
-  return "https://images.unsplash.com/photo-1590496793929-36417d3117de?auto=format&fit=crop&w=800&q=80";
-}
-
 export function ComplaintDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -130,7 +114,7 @@ export function ComplaintDetailPage() {
   const resolvedImageSrc =
     complaint.resolutionImage ||
     complaint.resolution_image_url ||
-    getContextualResolutionFallback(complaint);
+    "";
 
   // Derive latest officer note from timeline or fallback
   const resolvedTimelineEntry = complaint.timeline?.find(
@@ -237,7 +221,7 @@ export function ComplaintDetailPage() {
           </div>
 
           {/* Municipal Resolution Proof & Evidence Section */}
-          {complaint.status === "RESOLVED" || complaint.resolutionImage ? (
+          {resolvedImageSrc ? (
             <div className="bg-white rounded-2xl border-2 border-emerald-500/30 p-5 sm:p-6 shadow-sm space-y-5">
               {/* Card Header with View Mode Switcher */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-slate-100">
@@ -534,18 +518,32 @@ export function ComplaintDetailPage() {
                 </div>
               </div>
 
-              {/* Informative Notice: Proof pending */}
-              <div className="p-3 bg-blue-50/60 rounded-xl border border-blue-200/70 flex items-start gap-2.5 text-xs text-blue-900">
-                <Camera className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold block">
-                    Authority Resolution Photo Proof Required
-                  </span>
-                  <span className="text-2xs text-blue-800/80">
-                    Once municipal field crews complete ground remediation, an official verified Before &amp; After resolution photograph will be published here by {complaint.authority}.
-                  </span>
+              {/* Informative Notice: Proof status */}
+              {complaint.status === "RESOLVED" ? (
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200/80 flex items-start gap-2.5 text-xs text-amber-900">
+                  <Clock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block">
+                      Awaiting Authority Photo Proof Upload
+                    </span>
+                    <span className="text-2xs text-amber-800">
+                      This ticket was marked as Resolved by {complaint.authority}, but the field supervisor has not yet uploaded the ground completion photograph.
+                    </span>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="p-3 bg-blue-50/60 rounded-xl border border-blue-200/70 flex items-start gap-2.5 text-xs text-blue-900">
+                  <Camera className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block">
+                      Authority Resolution Photo Proof Required
+                    </span>
+                    <span className="text-2xs text-blue-800/80">
+                      Once municipal field crews complete ground remediation, an official verified Before &amp; After resolution photograph will be published here by {complaint.authority}.
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {complaint.aiMetadata?.tags && (
                 <div className="flex items-center gap-1.5 flex-wrap pt-1">
