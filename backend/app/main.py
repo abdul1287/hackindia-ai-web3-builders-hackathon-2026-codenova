@@ -28,6 +28,14 @@ async def lifespan(app: FastAPI):
             conn.commit()
     except Exception:
         pass  # Column already exists
+
+    # Auto-seed database with municipal authorities and realistic sample complaints
+    try:
+        from app.seed import seed_database
+        seed_database()
+    except Exception as e:
+        print(f"[Warning] Seed database error: {e}")
+
     yield
 
 app = FastAPI(
@@ -40,11 +48,11 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configure CORS
+# Configure CORS - universally allowed for all Vercel deployments and clients
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

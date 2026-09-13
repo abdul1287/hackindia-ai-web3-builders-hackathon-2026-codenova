@@ -66,8 +66,13 @@ export function ComplaintDetailPage() {
         if (isMounted) setLoading(false);
       });
 
-    // Listen to updates from authority actions
-    const handleUpdate = () => {
+    // Listen to updates from authority actions (in current tab, other tabs, or storage sync)
+    const handleUpdate = (event) => {
+      // If the event provided the updated complaint directly, apply immediately
+      if (event?.detail && (event.detail.id === id || event.detail.complaint_id === id)) {
+        if (isMounted) setComplaint(event.detail);
+      }
+
       api.getComplaintById(id).then((res) => {
         if (isMounted && res.success && res.data) {
           setComplaint(res.data);
@@ -76,9 +81,27 @@ export function ComplaintDetailPage() {
     };
 
     window.addEventListener("civicai_complaints_updated", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+
+    let channel = null;
+    if (typeof BroadcastChannel !== "undefined") {
+      try {
+        channel = new BroadcastChannel("civicai_sync");
+        channel.onmessage = (msg) => {
+          if (msg.data?.type === "COMPLAINT_UPDATED" || msg.data?.type === "COMPLAINTS_UPDATED") {
+            handleUpdate({ detail: msg.data.detail });
+          }
+        };
+      } catch (_) {}
+    }
+
     return () => {
       isMounted = false;
       window.removeEventListener("civicai_complaints_updated", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+      if (channel) {
+        channel.close();
+      }
     };
   }, [id]);
 

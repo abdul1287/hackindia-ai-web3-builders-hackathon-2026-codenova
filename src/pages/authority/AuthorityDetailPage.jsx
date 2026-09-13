@@ -30,6 +30,7 @@ import { ErrorState } from "../../components/ErrorState";
 import { showToast } from "../../components/Toast";
 import { formatDate } from "../../utils/formatters";
 import { useAuthorityAuth, matchesDepartment } from "../../context/AuthorityAuthContext";
+import { compressImage } from "../../utils/imageCompressor";
 import * as api from "../../services/api";
 
 export function AuthorityDetailPage() {
@@ -80,7 +81,7 @@ export function AuthorityDetailPage() {
     };
   }, [id]);
 
-  const handleImageUpload = (e) => {
+  const handleImageUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -93,16 +94,27 @@ export function AuthorityDetailPage() {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setResolutionImage(event.target.result);
+    try {
+      const compressedDataUrl = await compressImage(file, 1200, 900, 0.75);
+      setResolutionImage(compressedDataUrl);
       showToast({
         title: "Proof Photo Ready",
-        message: "Ground resolution photograph attached.",
+        message: "Ground resolution photograph optimized & attached.",
         type: "success",
       });
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      console.warn("Compression failed, using standard reader fallback:", err);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setResolutionImage(event.target.result);
+        showToast({
+          title: "Proof Photo Ready",
+          message: "Ground resolution photograph attached.",
+          type: "success",
+        });
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleStatusUpdate = async (e) => {
@@ -111,11 +123,24 @@ export function AuthorityDetailPage() {
 
     setUpdating(true);
     try {
+      // Ensure image is compressed if it's an uncompressed data URL
+      let finalResolutionImage = resolutionImage;
+      if (
+        finalResolutionImage &&
+        typeof finalResolutionImage === "string" &&
+        finalResolutionImage.startsWith("data:image/") &&
+        finalResolutionImage.length > 500000
+      ) {
+        try {
+          finalResolutionImage = await compressImage(finalResolutionImage, 1200, 900, 0.75);
+        } catch (_) {}
+      }
+
       const res = await api.updateComplaintStatus(
         complaint.id,
         selectedStatus,
         authorityNote.trim(),
-        resolutionImage
+        finalResolutionImage
       );
 
       if (res.success && res.data) {

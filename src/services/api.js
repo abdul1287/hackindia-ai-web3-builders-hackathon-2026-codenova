@@ -273,8 +273,20 @@ export async function updateComplaintStatus(id, status, note = "", resolutionIma
     const json = await res.json();
     const normalized = normalizeComplaint(json);
 
-    // Notify listeners so UI updates immediately
+    // Notify listeners in current window
     window.dispatchEvent(new CustomEvent("civicai_complaints_updated", { detail: normalized }));
+
+    // Notify listeners in other tabs
+    if (typeof BroadcastChannel !== "undefined") {
+      try {
+        const channel = new BroadcastChannel("civicai_sync");
+        channel.postMessage({ type: "COMPLAINT_UPDATED", detail: normalized });
+        channel.close();
+      } catch (_) {}
+    }
+    try {
+      localStorage.setItem("civicai_last_sync", Date.now().toString());
+    } catch (_) {}
 
     return { success: true, data: normalized };
   } catch (err) {

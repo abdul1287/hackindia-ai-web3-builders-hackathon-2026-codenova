@@ -4,6 +4,7 @@ import { Button } from "./Button";
 import { CameraModal } from "./CameraModal";
 import { cn } from "../utils/cn";
 import { SAMPLE_CIVIC_ISSUES } from "../utils/aiAnalyzer";
+import { compressImage } from "../utils/imageCompressor";
 
 export function ImageUploader({
   image,
@@ -19,7 +20,7 @@ export function ImageUploader({
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
 
-  const handleFile = (file) => {
+  const handleFile = async (file) => {
     setUploadError(null);
     if (!file) return;
 
@@ -28,20 +29,30 @@ export function ImageUploader({
       return;
     }
 
-    if (file.size > 12 * 1024 * 1024) {
-      setUploadError("Image size exceeds 12MB limit. Please choose a smaller photo.");
+    if (file.size > 15 * 1024 * 1024) {
+      setUploadError("Image size exceeds 15MB limit. Please choose a smaller photo.");
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
+    try {
+      const compressedDataUrl = await compressImage(file, 1200, 900, 0.78);
       onImageSelected({
         file,
-        previewUrl: e.target.result,
+        previewUrl: compressedDataUrl,
         name: file.name,
       });
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      console.warn("Compression fallback:", err);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        onImageSelected({
+          file,
+          previewUrl: e.target.result,
+          name: file.name,
+        });
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleDrop = (e) => {

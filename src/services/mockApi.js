@@ -4,29 +4,63 @@ import { generateComplaintId } from "../utils/formatters";
 
 const STORAGE_KEY = "civicai_complaints_db_v1";
 
-// Helper to get complaints from localStorage with initial fallback
+let memoryComplaints = null;
+
+// Helper to get complaints from localStorage with initial fallback and memory cache
 function getStoredComplaints() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_COMPLAINTS));
-      return INITIAL_COMPLAINTS;
+      if (!memoryComplaints) {
+        memoryComplaints = [...INITIAL_COMPLAINTS];
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_COMPLAINTS));
+        } catch (_) {}
+      }
+      return memoryComplaints;
     }
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    memoryComplaints = parsed;
+    return parsed;
   } catch (err) {
     console.warn("Error reading from localStorage, using in-memory mock data:", err);
-    return INITIAL_COMPLAINTS;
+    return memoryComplaints || INITIAL_COMPLAINTS;
   }
 }
 
-// Helper to save complaints to localStorage
+// Helper to save complaints to localStorage with quota protection and cross-tab sync
 function saveComplaints(complaints) {
+  memoryComplaints = complaints;
+
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(complaints));
-    window.dispatchEvent(new CustomEvent("civicai_complaints_updated", { detail: complaints }));
   } catch (err) {
-    console.error("Failed to save complaints:", err);
+    console.warn("Direct localStorage write failed (quota limit), applying fallback compression:", err);
+    try {
+      // If quota exceeded, clean up any redundant data
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(complaints));
+    } catch (retryErr) {
+      console.error("Critical: Unable to persist complaints to localStorage:", retryErr);
+    }
   }
+
+  // Cross-tab synchronization via BroadcastChannel
+  if (typeof BroadcastChannel !== "undefined") {
+    try {
+      const channel = new BroadcastChannel("civicai_sync");
+      channel.postMessage({ type: "COMPLAINTS_UPDATED", detail: complaints });
+      channel.close();
+    } catch (_) {}
+  }
+
+  // Trigger storage event for other open tabs
+  try {
+    localStorage.setItem("civicai_last_sync", Date.now().toString());
+  } catch (_) {}
+
+  // Dispatch window event for current tab
+  window.dispatchEvent(new CustomEvent("civicai_complaints_updated", { detail: complaints }));
 }
 
 // Simulated network delay helper

@@ -3,7 +3,7 @@ from typing import Optional, List, Tuple
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, desc, func
 from fastapi import HTTPException, status
-
+import os
 from app.models.complaint import Complaint
 from app.models.authority import Authority
 from app.models.status_history import StatusHistory
@@ -156,21 +156,34 @@ def update_complaint_status(
     if resolution_image:
         if resolution_image.startswith("data:image/"):
             try:
-                import base64
-                import uuid
-                from app.services.cloudinary_service import UPLOAD_DIR
-                header, encoded = resolution_image.split(",", 1)
-                ext = ".jpg"
-                if "png" in header:
-                    ext = ".png"
-                elif "webp" in header:
-                    ext = ".webp"
-                file_bytes = base64.b64decode(encoded)
-                filename = f"resolution_{uuid.uuid4().hex}{ext}"
-                filepath = os.path.join(UPLOAD_DIR, filename)
-                with open(filepath, "wb") as f:
-                    f.write(file_bytes)
-                complaint.resolution_image_url = f"/uploads/{filename}"
+                from app.services.cloudinary_service import is_cloudinary_configured, UPLOAD_DIR
+                if is_cloudinary_configured:
+                    try:
+                        import cloudinary.uploader
+                        upload_res = cloudinary.uploader.upload(
+                            resolution_image,
+                            folder="civicai/resolutions",
+                            resource_type="image"
+                        )
+                        complaint.resolution_image_url = upload_res.get("secure_url") or upload_res.get("url")
+                    except Exception as cloud_err:
+                        print(f"[Warning] Cloudinary resolution image upload failed: {cloud_err}")
+                
+                if not complaint.resolution_image_url:
+                    import base64
+                    import uuid
+                    header, encoded = resolution_image.split(",", 1)
+                    ext = ".jpg"
+                    if "png" in header:
+                        ext = ".png"
+                    elif "webp" in header:
+                        ext = ".webp"
+                    file_bytes = base64.b64decode(encoded)
+                    filename = f"resolution_{uuid.uuid4().hex}{ext}"
+                    filepath = os.path.join(UPLOAD_DIR, filename)
+                    with open(filepath, "wb") as f:
+                        f.write(file_bytes)
+                    complaint.resolution_image_url = f"/uploads/{filename}"
             except Exception as e:
                 print(f"[Warning] Failed to decode resolution image data URL: {e}")
                 complaint.resolution_image_url = resolution_image
